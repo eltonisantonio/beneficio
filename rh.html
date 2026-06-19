@@ -1,26 +1,1508 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Raguife · RH / DP</title>
-  <meta name="robots" content="noindex" />
+<html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raguife · RH / DP</title><meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* ===========================================================================
+   base.css — design tokens compartilhados (Funcionário + RH)
+   Identidade Raguife: verde profundo + acento oliva, tipografia Bricolage/Inter.
+   =========================================================================== */
+:root{
+  --bg:#eef5ec; --surface:#fff; --ink:#14241a; --muted:#647267; --line:#dce7db;
+  --primary:#024f2b; --primary2:#0a6b3c; --soft:#e4f1e8;
+  --accent:#739630; --accentSoft:#eef4e1;
+  --bad:#c23a45; --badSoft:#fbeaeb; --warn:#b06b00; --warnSoft:#fff3d8;
+  --ok:#1f7a4d; --okSoft:#e4f1e8;
+  --shadow:0 12px 34px rgba(2,79,43,.10);
+  --radius:16px;
+  --display:'Bricolage Grotesque',system-ui,sans-serif;
+  --body:Inter,system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{font-family:var(--body);color:var(--ink);-webkit-font-smoothing:antialiased}
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+/* Toast — usado nas duas áreas */
+.toast{
+  position:fixed;left:50%;bottom:18px;transform:translateX(-50%) translateY(20px);
+  background:#14241a;color:#fff;border-radius:999px;padding:11px 15px;
+  font-size:13px;font-weight:800;opacity:0;pointer-events:none;transition:.2s;z-index:60;
+  box-shadow:0 10px 30px rgba(0,0,0,.25)
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-  <link rel="stylesheet" href="css/base.css" />
-  <link rel="stylesheet" href="css/rh.css" />
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:.001ms!important;transition-duration:.001ms!important}
+}
 
-  <!-- SheetJS: leitura de planilhas Excel/CSV no navegador -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-</head>
-<body>
-  <div id="root">
-    <div class="rh-login"><div class="rh-login-card"><h1>Carregando…</h1></div></div>
-  </div>
-  <div class="toast" id="toast"></div>
-  <script type="module" src="js/rh.js"></script>
-</body>
-</html>
+/* ===========================================================================
+   rh.css — área RH/DP (desktop-first). Mesma identidade verde, layout amplo
+   com menu lateral, tabelas e formulários. Tokens em base.css.
+   =========================================================================== */
+body{background:#f4f7f3}
+
+/* --- Login RH --- */
+.rh-login{min-height:100vh;display:grid;place-items:center;padding:24px;
+  background:linear-gradient(135deg,#f6faf4,#e7f0e5)}
+.rh-login-card{background:#fff;border:1px solid var(--line);border-radius:24px;
+  box-shadow:var(--shadow);padding:32px;width:min(400px,100%);text-align:center}
+.rh-login-card img{width:150px;margin:0 auto 18px;display:block;filter:none}
+.rh-login-card h1{font-family:var(--display);color:var(--primary);font-size:24px;margin:0 0 4px}
+.rh-login-card p{color:var(--muted);font-size:14px;margin:0 0 20px}
+.rh-login-card .field{margin-bottom:10px;text-align:left}
+
+/* --- Shell desktop --- */
+.rh-shell{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
+.rh-side{background:linear-gradient(180deg,var(--primary),#013a20);color:#fff;
+  padding:20px 14px;display:flex;flex-direction:column;gap:6px;position:sticky;top:0;height:100vh}
+.rh-side .logo{display:flex;align-items:center;gap:10px;margin:4px 6px 18px}
+.rh-side .logo img{width:104px;filter:brightness(0) invert(1)}
+.rh-side nav{display:flex;flex-direction:column;gap:2px;flex:1;overflow:auto}
+.rh-side nav button{display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+  background:transparent;border:0;color:rgba(255,255,255,.82);font:inherit;font-weight:700;
+  font-size:14px;padding:11px 12px;border-radius:12px;cursor:pointer}
+.rh-side nav button:hover{background:rgba(255,255,255,.08);color:#fff}
+.rh-side nav button.active{background:rgba(255,255,255,.16);color:#fff}
+.rh-side nav button .ic{width:20px;text-align:center}
+.rh-side .who{font-size:12px;color:rgba(255,255,255,.7);padding:10px 8px;border-top:1px solid rgba(255,255,255,.15)}
+.rh-side .who b{display:block;color:#fff;font-size:13px;margin-bottom:2px;word-break:break-all}
+.rh-side .who button{margin-top:8px;width:100%;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);
+  color:#fff;border-radius:10px;padding:8px;font-weight:800;font-size:12px;cursor:pointer}
+
+.rh-main{padding:28px 32px;max-width:1180px}
+.rh-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:22px;gap:16px;flex-wrap:wrap}
+.rh-head h1{font-family:var(--display);font-size:28px;color:var(--ink);margin:0}
+.rh-head p{color:var(--muted);margin:4px 0 0;font-size:14px}
+
+/* --- Componentes --- */
+.field{width:100%;border:1px solid var(--line);background:#fff;border-radius:12px;
+  padding:11px 13px;font:inherit;outline:none}
+.field:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--soft)}
+label.lbl{display:block;font-size:12px;font-weight:800;color:var(--muted);margin:0 0 5px;text-transform:uppercase;letter-spacing:.03em}
+.btn{border:0;background:var(--primary);color:#fff;border-radius:12px;padding:11px 18px;
+  font:inherit;font-weight:800;cursor:pointer}
+.btn:hover{background:var(--primary2)}
+.btn:disabled{opacity:.55;cursor:default}
+.btn.secondary{background:var(--soft);color:var(--primary)}
+.btn.line{background:#fff;color:var(--primary);border:1px solid var(--line)}
+.btn.danger{background:var(--badSoft);color:var(--bad)}
+.btn.sm{padding:7px 12px;font-size:13px;border-radius:10px}
+.error{display:none;background:var(--badSoft);color:var(--bad);border-radius:10px;padding:10px;margin-top:10px;font-size:13px;font-weight:700;text-align:left}
+
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-bottom:24px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px}
+.kpi b{display:block;font-family:var(--display);font-size:34px;color:var(--primary);line-height:1}
+.kpi span{font-size:13px;color:var(--muted);font-weight:700}
+
+.panel{background:#fff;border:1px solid var(--line);border-radius:18px;padding:0;overflow:hidden;margin-bottom:22px}
+.panel-head{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line);gap:12px;flex-wrap:wrap}
+.panel-head h2{font-family:var(--display);font-size:18px;margin:0;color:var(--ink)}
+.panel-body{padding:18px}
+
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);
+  padding:11px 14px;border-bottom:1px solid var(--line);font-weight:800}
+td{padding:12px 14px;border-bottom:1px solid #eef3ec;vertical-align:middle}
+tr:last-child td{border-bottom:0}
+tr:hover td{background:#fafcf9}
+.tag{display:inline-flex;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:800;text-transform:uppercase}
+.tag.on{background:var(--okSoft);color:var(--ok)}
+.tag.off{background:#f0f0f0;color:#888}
+.tag.warn{background:var(--warnSoft);color:var(--warn)}
+.tag.draft{background:#f0f0f0;color:#888}
+.tag.open{background:var(--okSoft);color:var(--ok)}
+.tag.closed{background:var(--warnSoft);color:var(--warn)}
+.tag.drawn{background:#e6eefb;color:#2c5ca8}
+.tag.published{background:var(--soft);color:var(--primary)}
+.muted{color:var(--muted)}
+.empty{padding:30px;text-align:center;color:var(--muted);font-size:14px}
+.row-actions{display:flex;gap:6px;justify-content:flex-end}
+
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form-grid .full{grid-column:1/-1}
+.form-grid textarea.field{min-height:80px;resize:vertical;font-family:var(--body)}
+.check{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+.check input{width:17px;height:17px;accent-color:var(--primary)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;
+  padding:7px 12px;font-size:13px;font-weight:700;cursor:pointer;user-select:none}
+.chip.on{background:var(--primary);color:#fff;border-color:var(--primary)}
+
+/* Modal */
+.modal-bg{position:fixed;inset:0;background:rgba(8,20,12,.45);display:grid;place-items:center;padding:20px;z-index:50}
+.modal{background:#fff;border-radius:20px;width:min(720px,100%);max-height:90vh;overflow:auto;box-shadow:0 30px 80px rgba(0,0,0,.3)}
+.modal-head{display:flex;justify-content:space-between;align-items:center;padding:18px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff}
+.modal-head h2{font-family:var(--display);font-size:20px;margin:0}
+.modal-head button.x{background:transparent;border:0;font-size:22px;cursor:pointer;color:var(--muted)}
+.modal-body{padding:20px}
+.modal-foot{display:flex;justify-content:flex-end;gap:10px;padding:16px 20px;border-top:1px solid var(--line);position:sticky;bottom:0;background:#fff}
+
+.icon-box{width:54px;height:54px;border-radius:14px;display:grid;place-items:center;overflow:hidden;color:#fff;font-size:26px}
+.icon-box.contain{padding:5px;background:#fff!important;border:1px solid var(--line)}
+.icon-box.contain img{max-width:100%;max-height:100%;object-fit:contain}
+.icon-box.cover img{width:100%;height:100%;object-fit:cover}
+
+.hint{font-size:13px;color:var(--muted);background:var(--soft);border-radius:12px;padding:12px 14px;margin-bottom:16px;line-height:1.5}
+.dropzone{border:2px dashed var(--line);border-radius:14px;padding:26px;text-align:center;color:var(--muted);cursor:pointer}
+.dropzone:hover{border-color:var(--primary);background:#fafcf9}
+
+@media (max-width:860px){
+  .rh-shell{grid-template-columns:1fr}
+  .rh-side{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center}
+  .rh-side nav{flex-direction:row;flex-wrap:wrap}
+  .rh-main{padding:20px 16px}
+  .form-grid{grid-template-columns:1fr}
+}
+
+</style></head><body>
+<div id="root"><div class="rh-login"><div class="rh-login-card"><h1>Carregando…</h1></div></div></div>
+<div class="toast" id="toast"></div>
+<script type="module">
+// ============================================================================
+// firebase.js — inicialização compartilhada do Firebase
+// Importado tanto pela área do Funcionário quanto pela área do RH.
+// Usa os SDKs modulares via CDN (sem build/empacotamento — pronto p/ GitHub Pages).
+// ============================================================================
+
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import {
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc,
+  updateDoc, deleteDoc, query, where, orderBy, writeBatch, serverTimestamp, arrayUnion
+} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import {
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
+} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+
+// --- Configuração do projeto (chave pública do front-end; não é segredo) ------
+const firebaseConfig = {
+  apiKey: 'AIzaSyBgl6GSdC-BPGpMcdAUoWDMbNsM8qn5p1A',
+  authDomain: 'beneficios-f89ea.firebaseapp.com',
+  projectId: 'beneficios-f89ea',
+  storageBucket: 'beneficios-f89ea.firebasestorage.app',
+  messagingSenderId: '722178353043',
+  appId: '1:722178353043:web:29db185d0e1c8dd0416a66'
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+// Reexporta as funções do Firestore/Auth para os outros módulos não precisarem
+// importar direto do CDN (mantém os imports centralizados em um único lugar).
+
+
+
+const LOGO = "data:image/png;base64,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";
+
+
+// ============================================================================
+// helpers.js — utilitários puros, sem dependência de Firebase.
+// Compartilhado entre Funcionário e RH.
+// ============================================================================
+
+// --- Identificadores e escape de HTML ---------------------------------------
+function id() {
+  return Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+}
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"]/g, s => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[s]
+  ));
+}
+function escAttr(v) {
+  return esc(v).replace(/'/g, '&#39;');
+}
+
+// --- CPF ---------------------------------------------------------------------
+// digits: extrai só os números. normalizeCpf: 11 dígitos com zeros à esquerda.
+function digits(v) { return String(v ?? '').replace(/\D/g, ''); }
+function normalizeCpf(v) { return digits(v).padStart(11, '0').slice(-11); }
+
+// Máscara COMPLETA (uso interno/admin): 000.000.000-00
+function cpfMaskFull(v) {
+  return normalizeCpf(v).replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+}
+// Máscara SEGURA (exibida ao funcionário e no admin): ***.456.789-**
+function cpfSafe(v) {
+  const d = normalizeCpf(v);
+  return '***.' + d.slice(3, 6) + '.' + d.slice(6, 9) + '-**';
+}
+function isValidCpfLength(v) { return digits(v).length === 11; }
+
+// Hash SHA-256 do CPF normalizado → usado como ID do documento do funcionário.
+// O CPF aberto NUNCA é gravado no banco; guardamos apenas o hash + a máscara.
+async function cpfHash(v) {
+  const norm = normalizeCpf(v);
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('rgf:' + norm));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// --- Nomes -------------------------------------------------------------------
+function firstName(n) {
+  return String(n || '').trim().split(/\s+/)[0] || 'Colaborador';
+}
+
+// --- Datas -------------------------------------------------------------------
+function nowLocalForInput() {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+function dt(v) {
+  if (!v) return '';
+  try { return new Date(v).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); }
+  catch { return String(v); }
+}
+function dateShort(v) {
+  if (!v) return '';
+  try { return new Date(v).toLocaleDateString('pt-BR'); } catch { return String(v); }
+}
+// Verifica se a data atual está dentro do intervalo [from, to] (ambos opcionais).
+function dateOk(from, to) {
+  const n = Date.now();
+  if (from && new Date(from).getTime() > n) return false;
+  if (to && new Date(to).getTime() < n) return false;
+  return true;
+}
+
+// --- Voucher -----------------------------------------------------------------
+function voucherCode() {
+  const s = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let out = '';
+  for (let i = 0; i < 8; i++) out += s[Math.floor(Math.random() * s.length)];
+  return out.slice(0, 4) + '-' + out.slice(4);
+}
+
+// --- Toast (notificação rápida) ----------------------------------------------
+function toast(msg) {
+  let el = document.getElementById('toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast';
+    el.className = 'toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// --- Leitura de arquivo como Data URL (para logos/ícones em Base64) ----------
+function readFileDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+// Paleta dos cards de benefício (índice → cor).
+const CARD_COLORS = [
+  '#024f2b', '#739630', '#0a6b3c', '#557024',
+  '#1f7a4d', '#666666', '#2c5ca8', '#b06b00'
+];
+
+
+const DB = (function(){
+// ============================================================================
+// db.js — Camada de dados. Toda leitura/escrita no Firestore passa por aqui.
+// Coleções (as "gavetas etiquetadas"):
+//   settings · profiles · benefits · employees · raffles
+//   raffle_entries · raffle_winners · imports · audit_logs
+//
+// Decisões de privacidade (LGPD):
+//   - O CPF aberto NUNCA é gravado. O ID do documento do funcionário é o
+//     hash SHA-256 do CPF. Guardamos apenas cpfMasked + cpfHash(=id).
+//   - O funcionário só consegue LER o próprio documento (getDoc por id = hash);
+//     não consegue listar/enumerar a coleção. Quem manda nisso são as regras
+//     do Firestore (ver firestore.rules), não só o código.
+// ============================================================================
+
+
+
+
+const col = name => collection(db, name);
+const ref = (name, docId) => doc(db, name, docId);
+
+// ----------------------------------------------------------------------------
+// SETTINGS (documento único: settings/main)
+// ----------------------------------------------------------------------------
+const DEFAULT_SETTINGS = {
+  portalName: 'Portal de Benefícios',
+  companyName: 'Raguife',
+  privacyText: 'Utilizamos seu CPF apenas para identificar seu cadastro e exibir os ' +
+    'benefícios disponíveis conforme seu perfil. Seus dados não serão exibidos ' +
+    'publicamente. Em caso de dúvidas, procure o RH/DP.',
+  theme: 'green'
+};
+
+async function getSettings() {
+  const snap = await getDoc(ref('settings', 'main')).catch(() => null);
+  return Object.assign({}, DEFAULT_SETTINGS, snap && snap.exists() ? snap.data() : {});
+}
+async function saveSettings(data) {
+  await setDoc(ref('settings', 'main'), { ...data, updatedAt: Date.now() }, { merge: true });
+}
+
+// ----------------------------------------------------------------------------
+// PROFILES
+// ----------------------------------------------------------------------------
+const DEFAULT_PROFILES = [
+  { id: 'p_raguife', name: 'Raguife' },
+  { id: 'p_bd', name: 'Raguife BD' },
+  { id: 'p_comercial', name: 'Comercial' },
+  { id: 'p_aprendiz', name: 'Estagiário/Aprendiz' }
+];
+
+async function listProfiles() {
+  const snap = await getDocs(col('profiles'));
+  const out = [];
+  snap.forEach(d => out.push({ id: d.id, ...d.data() }));
+  return out.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+}
+async function saveProfile(p) {
+  const docId = p.id || ('p_' + id());
+  const data = {
+    name: p.name || 'Perfil',
+    description: p.description || '',
+    active: p.active !== false,
+    updatedAt: Date.now()
+  };
+  if (!p.id) data.createdAt = Date.now();
+  await setDoc(ref('profiles', docId), data, { merge: true });
+  return docId;
+}
+async function deleteProfile(profileId) {
+  await deleteDoc(ref('profiles', profileId));
+}
+// Garante que os 4 perfis padrão existam (chamado no primeiro acesso do RH).
+async function seedProfilesIfEmpty() {
+  const existing = await listProfiles();
+  if (existing.length) return existing;
+  for (const p of DEFAULT_PROFILES) {
+    await setDoc(ref('profiles', p.id), {
+      name: p.name, description: '', active: true, createdAt: Date.now(), updatedAt: Date.now()
+    });
+  }
+  return listProfiles();
+}
+
+// ----------------------------------------------------------------------------
+// BENEFITS
+// ----------------------------------------------------------------------------
+async function listBenefits() {
+  const snap = await getDocs(col('benefits'));
+  const out = [];
+  snap.forEach(d => out.push(normalizeBenefit({ id: d.id, ...d.data() })));
+  return out.sort((a, b) => (a.order || 0) - (b.order || 0) || a.name.localeCompare(b.name));
+}
+function normalizeBenefit(b) {
+  return {
+    id: b.id,
+    name: b.name || 'Benefício sem nome',
+    category: b.category || 'Geral',
+    description: b.description || '',
+    details: b.details || '',
+    iconBase64: b.iconBase64 || '',
+    icon: b.icon || '💸',
+    iconFit: b.iconFit === 'cover' ? 'cover' : 'contain',
+    color: Number.isInteger(b.color) ? b.color : 0,
+    active: b.active !== false,
+    actionRequired: !!b.actionRequired,
+    responsible: b.responsible || '',
+    startDate: b.startDate || '',
+    endDate: b.endDate || '',
+    order: Number.isFinite(Number(b.order)) ? Number(b.order) : 0,
+    profileIds: Array.isArray(b.profileIds) ? b.profileIds : [],
+    links: Array.isArray(b.links) ? b.links : [],
+    documents: Array.isArray(b.documents) ? b.documents : [],
+    createdAt: b.createdAt || Date.now(),
+    updatedAt: b.updatedAt || Date.now()
+  };
+}
+async function saveBenefit(b) {
+  const docId = b.id || ('b_' + id());
+  const data = normalizeBenefit({ ...b, id: docId });
+  delete data.id;
+  data.updatedAt = Date.now();
+  if (!b.id) data.createdAt = Date.now();
+  await setDoc(ref('benefits', docId), data, { merge: true });
+  return docId;
+}
+async function deleteBenefit(benefitId) {
+  await deleteDoc(ref('benefits', benefitId));
+}
+
+// ----------------------------------------------------------------------------
+// EMPLOYEES  (ID do documento = hash do CPF)
+// ----------------------------------------------------------------------------
+
+// Login do funcionário: busca SÓ o próprio documento, por id = hash do CPF.
+// Retorna null se não existir na base ativa.
+async function getEmployeeByCpf(cpf) {
+  const h = await cpfHash(cpf);
+  const snap = await getDoc(ref('employees', h)).catch(() => null);
+  if (!snap || !snap.exists()) return null;
+  return { id: h, ...snap.data() };
+}
+
+// Reabre a sessão pelo hash (guardamos o hash, nunca o CPF, no dispositivo).
+async function getEmployeeByHash(h) {
+  const snap = await getDoc(ref('employees', h)).catch(() => null);
+  if (!snap || !snap.exists()) return null;
+  return { id: h, ...snap.data() };
+}
+
+// Listagem completa (somente RH).
+async function listEmployees() {
+  const snap = await getDocs(col('employees'));
+  const out = [];
+  snap.forEach(d => out.push({ id: d.id, ...d.data() }));
+  return out.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+}
+
+// Mapeia o texto da coluna "Perfil" da planilha para ids de perfis cadastrados.
+function resolveProfileIds(profileText, profiles) {
+  const names = String(profileText || '')
+    .split(/[;,|/]/).map(x => x.trim().toLowerCase()).filter(Boolean);
+  return profiles
+    .filter(p => names.includes(String(p.name).toLowerCase()))
+    .map(p => p.id);
+}
+
+// IMPORTAÇÃO: a nova planilha SUBSTITUI completamente a base anterior.
+// rows: [{ name, cpf, profile, unit?, department?, role?, ... }]
+// Retorna o resumo (totais) para exibir e gravar no histórico.
+async function importEmployees(rows, meta = {}) {
+  const profiles = await listProfiles();
+  const existing = await listEmployees();
+  const existingIds = new Set(existing.map(e => e.id));
+
+  // Monta os novos documentos.
+  const newDocs = [];
+  const newIds = new Set();
+  const totalsByProfile = {};
+  let withoutProfile = 0;
+
+  for (const r of rows) {
+    const cpf = normalizeCpf(r.cpf);
+    if (cpf.length !== 11) continue;
+    const h = await cpfHash(cpf);
+    if (newIds.has(h)) continue; // evita CPF duplicado na própria planilha
+    newIds.add(h);
+
+    const profileIds = resolveProfileIds(r.profile, profiles);
+    if (!profileIds.length) withoutProfile++;
+    profileIds.forEach(pid => { totalsByProfile[pid] = (totalsByProfile[pid] || 0) + 1; });
+
+    newDocs.push({
+      id: h,
+      data: {
+        name: String(r.name || '').trim(),
+        firstName: firstName(r.name),
+        cpfMasked: cpfSafe(cpf),
+        profileIds,
+        profileRaw: String(r.profile || '').trim(),
+        unit: String(r.unit || '').trim(),
+        department: String(r.department || '').trim(),
+        role: String(r.role || '').trim(),
+        situation: String(r.situation || '').trim(),
+        admissionDate: String(r.admissionDate || '').trim(),
+        registry: String(r.registry || '').trim(),
+        wonFilms: [],          // títulos de filmes já ganhos (trava do sorteio)
+        status: 'active',
+        importId: meta.importId || '',
+        updatedAt: Date.now()
+      }
+    });
+  }
+
+  // IDs a remover = existentes que não estão na nova planilha.
+  const toRemove = [...existingIds].filter(x => !newIds.has(x));
+
+  // Executa em lotes (limite do Firestore: 500 operações por batch).
+  const ops = [];
+  toRemove.forEach(rid => ops.push({ type: 'del', id: rid }));
+  newDocs.forEach(nd => ops.push({ type: 'set', id: nd.id, data: nd.data }));
+
+  for (let i = 0; i < ops.length; i += 450) {
+    const batch = writeBatch(db);
+    for (const op of ops.slice(i, i + 450)) {
+      if (op.type === 'del') batch.delete(ref('employees', op.id));
+      else batch.set(ref('employees', op.id), op.data);
+    }
+    await batch.commit();
+  }
+
+  const summary = {
+    fileName: meta.fileName || '',
+    totalEmployees: newDocs.length,
+    totalAdded: newDocs.filter(nd => !existingIds.has(nd.id)).length,
+    totalRemoved: toRemove.length,
+    totalsByProfile,
+    withoutProfile,
+    createdAt: Date.now(),
+    createdBy: meta.userEmail || ''
+  };
+  return summary;
+}
+
+// Histórico de importações.
+async function saveImportRecord(summary) {
+  const docRef = await addDoc(col('imports'), summary);
+  return docRef.id;
+}
+async function listImports() {
+  const snap = await getDocs(col('imports'));
+  const out = [];
+  snap.forEach(d => out.push({ id: d.id, ...d.data() }));
+  return out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+
+// ----------------------------------------------------------------------------
+// RAFFLES  (sorteio semanal do cinema)
+// status: draft → open → closed → drawn → published
+// ----------------------------------------------------------------------------
+async function listRaffles() {
+  const snap = await getDocs(col('raffles'));
+  const out = [];
+  snap.forEach(d => out.push({ id: d.id, ...d.data() }));
+  return out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+
+// Sorteio "atual" para o funcionário: o mais recente que não é rascunho.
+async function getCurrentRaffle() {
+  const all = await listRaffles();
+  return all.find(r => r.status && r.status !== 'draft') || null;
+}
+
+async function saveRaffle(r) {
+  const docId = r.id || ('rf_' + id());
+  const data = {
+    title: r.title || 'Sorteio do Cinema',
+    description: r.description || '',
+    status: r.status || 'draft',
+    startAt: r.startAt || '',
+    endAt: r.endAt || '',
+    drawAt: r.drawAt || '',
+    films: (r.films || []).map(f => ({
+      id: f.id || ('flm_' + id()),
+      title: f.title || 'Filme',
+      quantity: Number(f.quantity || 0),
+      active: f.active !== false
+    })),
+    updatedAt: Date.now()
+  };
+  if (!r.id) { data.createdAt = Date.now(); data.publishedAt = ''; }
+  await setDoc(ref('raffles', docId), data, { merge: true });
+  return docId;
+}
+async function deleteRaffle(raffleId) {
+  await deleteDoc(ref('raffles', raffleId));
+}
+async function getRaffle(raffleId) {
+  const snap = await getDoc(ref('raffles', raffleId));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+
+// ----------------------------------------------------------------------------
+// RAFFLE ENTRIES (inscrições). ID = `${raffleId}_${cpfHash}` → trava 1 por sorteio
+// ----------------------------------------------------------------------------
+function entryId(raffleId, h) { return `${raffleId}_${h}`; }
+
+// Funcionário consulta a PRÓPRIA inscrição (getDoc por id).
+async function getMyEntry(raffleId, h) {
+  const snap = await getDoc(ref('raffle_entries', entryId(raffleId, h))).catch(() => null);
+  return snap && snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+// Funcionário cria a inscrição. As regras do Firestore só permitem CREATE
+// (não UPDATE), então uma segunda tentativa no mesmo sorteio é barrada.
+async function createEntry(raffle, film, employee) {
+  const h = employee.id; // já é o hash
+  await setDoc(ref('raffle_entries', entryId(raffle.id, h)), {
+    raffleId: raffle.id,
+    filmId: film.id,
+    filmTitle: film.title,
+    cpfHash: h,
+    employeeName: employee.name || '',
+    createdAt: Date.now()
+  });
+}
+// Lista de inscritos (somente RH).
+async function listEntries(raffleId) {
+  const snap = await getDocs(query(col('raffle_entries'), where('raffleId', '==', raffleId)));
+  const out = [];
+  snap.forEach(d => out.push({ id: d.id, ...d.data() }));
+  return out;
+}
+
+// ----------------------------------------------------------------------------
+// RAFFLE WINNERS (ganhadores). ID = `${raffleId}_${cpfHash}` → 1 prêmio/sorteio
+// ----------------------------------------------------------------------------
+// Funcionário consulta o PRÓPRIO resultado (getDoc por id).
+async function getMyWinner(raffleId, h) {
+  const snap = await getDoc(ref('raffle_winners', entryId(raffleId, h))).catch(() => null);
+  return snap && snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+async function listWinners(raffleId) {
+  const snap = await getDocs(query(col('raffle_winners'), where('raffleId', '==', raffleId)));
+  const out = [];
+  snap.forEach(d => out.push({ id: d.id, ...d.data() }));
+  return out;
+}
+// Todos os ganhadores (para a trava: quem já ganhou cada filme).
+async function listAllWinners() {
+  const snap = await getDocs(col('raffle_winners'));
+  const out = [];
+  snap.forEach(d => out.push({ id: d.id, ...d.data() }));
+  return out;
+}
+
+// MOTOR DO SORTEIO (somente RH).
+// Regras aplicadas:
+//   - só concorre quem se inscreveu (clicou "Quero participar");
+//   - ninguém ganha o mesmo TÍTULO de filme que já ganhou (agora ou no histórico);
+//   - cada pessoa ganha no máximo 1 prêmio por sorteio.
+async function drawRaffle(raffleId) {
+  const raffle = await getRaffle(raffleId);
+  if (!raffle) throw new Error('Sorteio não encontrado.');
+  if (!raffle.films || !raffle.films.length) throw new Error('Cadastre ao menos um filme.');
+
+  const entries = await listEntries(raffleId);
+  const history = await listAllWinners();
+
+  // Conjunto "cpfHash::tituloMinusculo" de filmes já ganhos no histórico.
+  const wonBefore = new Set(
+    history.map(w => `${w.cpfHash}::${String(w.filmTitle || '').trim().toLowerCase()}`)
+  );
+
+  const selectedThisRaffle = new Set(); // ninguém ganha 2x no mesmo sorteio
+  const winners = [];
+
+  for (const film of raffle.films) {
+    if (film.active === false) continue;
+    const titleKey = String(film.title || '').trim().toLowerCase();
+    let pool = entries.filter(e =>
+      e.filmId === film.id &&
+      !selectedThisRaffle.has(e.cpfHash) &&
+      !wonBefore.has(`${e.cpfHash}::${titleKey}`)
+    );
+    // Embaralha (Fisher–Yates) e escolhe a quantidade de ingressos.
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const picked = pool.slice(0, Math.max(0, Number(film.quantity || 0)));
+    for (const e of picked) {
+      selectedThisRaffle.add(e.cpfHash);
+      winners.push({
+        raffleId,
+        filmId: film.id,
+        filmTitle: film.title,
+        cpfHash: e.cpfHash,
+        employeeName: e.employeeName || '',
+        voucherCode: voucherCode(),
+        createdAt: Date.now()
+      });
+    }
+  }
+
+  // Grava ganhadores + atualiza wonFilms no doc do funcionário (em lotes).
+  for (let i = 0; i < winners.length; i += 200) {
+    const batch = writeBatch(db);
+    for (const w of winners.slice(i, i + 200)) {
+      batch.set(ref('raffle_winners', entryId(raffleId, w.cpfHash)), w);
+      batch.update(ref('employees', w.cpfHash), {
+        wonFilms: arrayUnionTitle(w.filmTitle)
+      });
+    }
+    await batch.commit();
+  }
+
+  await updateDoc(ref('raffles', raffleId), {
+    status: 'drawn', drawAt: Date.now(), updatedAt: Date.now()
+  });
+  return winners;
+}
+
+// Helper p/ arrayUnion (anexa o título do filme sem duplicar).
+function arrayUnionTitle(title) { return arrayUnion(String(title || '').trim()); }
+
+async function publishRaffle(raffleId) {
+  await updateDoc(ref('raffles', raffleId), {
+    status: 'published', publishedAt: Date.now(), updatedAt: Date.now()
+  });
+}
+
+// ----------------------------------------------------------------------------
+// AUDIT LOGS (registro de quem fez o quê)
+// ----------------------------------------------------------------------------
+async function logAudit(entry) {
+  await addDoc(col('audit_logs'), {
+    action: entry.action || '',
+    entity: entry.entity || '',
+    entityId: entry.entityId || '',
+    userEmail: entry.userEmail || '',
+    detail: entry.detail || '',
+    createdAt: Date.now()
+  }).catch(() => {}); // auditoria nunca deve quebrar a ação principal
+}
+async function listAudit(limitN = 100) {
+  const snap = await getDocs(col('audit_logs'));
+  const out = [];
+  snap.forEach(d => out.push({ id: d.id, ...d.data() }));
+  return out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, limitN);
+}
+
+return { DEFAULT_PROFILES, DEFAULT_SETTINGS, arrayUnionTitle, createEntry, deleteBenefit, deleteProfile, deleteRaffle, drawRaffle, entryId, getCurrentRaffle, getEmployeeByCpf, getEmployeeByHash, getMyEntry, getMyWinner, getRaffle, getSettings, importEmployees, listAllWinners, listAudit, listBenefits, listEmployees, listEntries, listImports, listProfiles, listRaffles, listWinners, logAudit, normalizeBenefit, publishRaffle, resolveProfileIds, saveBenefit, saveImportRecord, saveProfile, saveRaffle, saveSettings, seedProfilesIfEmpty };
+})();
+
+
+// ============================================================================
+// rh.js — Área RH/DP (desktop-first).
+// Login real via Firebase Authentication (e-mail + senha). Cada admin tem a
+// própria conta; toda ação relevante é registrada em audit_logs.
+// ============================================================================
+
+
+
+
+
+
+const root = () => document.getElementById('root');
+
+// --- Estado ------------------------------------------------------------------
+const S = {
+  user: null, tab: 'dashboard',
+  profiles: [], benefits: [], employees: [], raffles: [], imports: [], audit: [],
+  editingBenefit: null, editingProfile: null, editingRaffle: null, viewingRaffle: null,
+  importPreview: null
+};
+
+const TABS = [
+  ['dashboard', '📊', 'Painel'],
+  ['benefits', '🎁', 'Benefícios'],
+  ['raffles', '🎬', 'Sorteios'],
+  ['employees', '👥', 'Funcionários'],
+  ['profiles', '🏷️', 'Perfis'],
+  ['imports', '📥', 'Importações'],
+  ['settings', '⚙️', 'Configurações'],
+  ['audit', '🧾', 'Auditoria']
+];
+
+// --- Auth --------------------------------------------------------------------
+onAuthStateChanged(auth, async (user) => {
+  S.user = user;
+  if (user) {
+    try { await loadAll(); render(); }
+    catch (e) {
+      root().innerHTML = `<div class="rh-login"><div class="rh-login-card">
+        <h1>Quase lá…</h1>
+        <p>O login funcionou, mas não consegui acessar o banco de dados.</p>
+        <p style="font-size:13px;color:var(--bad);font-weight:700">Provável causa: o Firestore ainda não foi criado, ou as regras (firestore.rules) não foram publicadas no console do Firebase.</p>
+        <button class="btn" style="width:100%;margin-top:12px" onclick="window.__logout()">Sair e tentar de novo</button>
+        <p style="font-size:11px;color:var(--muted);margin-top:10px">Detalhe técnico: ${esc(e?.message || e)}</p>
+      </div></div>`;
+    }
+  } else render();
+});
+
+async function doLogin() {
+  const email = document.getElementById('email').value.trim();
+  const pass = document.getElementById('pass').value;
+  const err = document.getElementById('loginErr');
+  const btn = document.getElementById('loginBtn');
+  err.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Entrando…';
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+    await DB.logAudit({ action: 'login', entity: 'auth', userEmail: email });
+  } catch (e) {
+    err.style.display = 'block';
+    err.textContent = authError(e);
+    btn.disabled = false; btn.textContent = 'Entrar';
+  }
+}
+function authError(e) {
+  const c = String(e?.code || '');
+  if (c.includes('invalid-credential') || c.includes('wrong-password') || c.includes('user-not-found'))
+    return 'E-mail ou senha incorretos.';
+  if (c.includes('too-many-requests')) return 'Muitas tentativas. Aguarde alguns minutos.';
+  if (c.includes('network')) return 'Sem conexão. Verifique sua internet.';
+  return 'Não foi possível entrar. Detalhe: ' + (e?.code || e?.message || e);
+}
+async function doLogout() { await signOut(auth); }
+
+async function loadAll() {
+  S.settings = await DB.getSettings();
+  S.profiles = await DB.seedProfilesIfEmpty();
+  S.benefits = await DB.listBenefits();
+  S.raffles = await DB.listRaffles();
+}
+async function refreshTabData() {
+  if (S.tab === 'employees') S.employees = await DB.listEmployees();
+  if (S.tab === 'imports') S.imports = await DB.listImports();
+  if (S.tab === 'audit') S.audit = await DB.listAudit();
+  if (S.tab === 'profiles') S.profiles = await DB.listProfiles();
+  if (S.tab === 'benefits') S.benefits = await DB.listBenefits();
+  if (S.tab === 'raffles') S.raffles = await DB.listRaffles();
+}
+async function goTab(tab) { S.tab = tab; await refreshTabData(); render(); }
+
+// ============================================================================
+// RENDER PRINCIPAL
+// ============================================================================
+function render() {
+  if (!S.user) { root().innerHTML = loginView(); setTimeout(() => document.getElementById('email')?.focus(), 20); return; }
+  root().innerHTML = `<div class="rh-shell">${sidebar()}<div class="rh-main">${tabView()}</div></div>`;
+  postRender();
+}
+
+function loginView() {
+  return `<div class="rh-login"><div class="rh-login-card">
+    <img src="${escAttr(LOGO)}" alt="Raguife">
+    <h1>Área RH / DP</h1>
+    <p>Acesso administrativo do Portal de Benefícios.</p>
+    <input class="field" id="email" type="email" placeholder="seu-email@raguife.com" autocomplete="username"
+      onkeydown="if(event.key==='Enter')document.getElementById('pass').focus()">
+    <input class="field" id="pass" type="password" placeholder="Senha" autocomplete="current-password"
+      onkeydown="if(event.key==='Enter')window.__login()">
+    <button class="btn" id="loginBtn" style="width:100%;margin-top:6px" onclick="window.__login()">Entrar</button>
+    <div id="loginErr" class="error"></div>
+  </div></div>`;
+}
+
+function sidebar() {
+  return `<aside class="rh-side">
+    <div class="logo"><img src="${escAttr(LOGO)}" alt="Raguife"></div>
+    <nav>${TABS.map(([key, ic, label]) =>
+      `<button class="${S.tab === key ? 'active' : ''}" onclick="window.__tab('${key}')">
+        <span class="ic">${ic}</span>${label}</button>`).join('')}</nav>
+    <div class="who"><b>${esc(S.user.email)}</b>RH / DP
+      <button onclick="window.__logout()">Sair</button></div>
+  </aside>`;
+}
+
+function tabView() {
+  switch (S.tab) {
+    case 'dashboard': return dashboardView();
+    case 'benefits': return benefitsView();
+    case 'raffles': return rafflesView();
+    case 'employees': return employeesView();
+    case 'profiles': return profilesView();
+    case 'imports': return importsView();
+    case 'settings': return settingsView();
+    case 'audit': return auditView();
+    default: return dashboardView();
+  }
+}
+
+function head(title, sub, actionHTML = '') {
+  return `<div class="rh-head"><div><h1>${esc(title)}</h1><p>${esc(sub)}</p></div>${actionHTML}</div>`;
+}
+
+// ============================================================================
+// PAINEL
+// ============================================================================
+function dashboardView() {
+  const activeBenefits = S.benefits.filter(b => b.active !== false).length;
+  const current = S.raffles.find(r => r.status && r.status !== 'draft');
+  const empCount = S.employees.length || '—';
+  return head('Painel', `Bem-vindo, ${esc(S.user.email)}`) + `
+    <div class="cards-grid">
+      <div class="kpi"><b>${S.benefits.length}</b><span>benefícios cadastrados</span></div>
+      <div class="kpi"><b>${activeBenefits}</b><span>benefícios ativos</span></div>
+      <div class="kpi"><b>${S.profiles.length}</b><span>perfis</span></div>
+      <div class="kpi"><b>${empCount}</b><span>funcionários ativos</span></div>
+    </div>
+    <div class="panel"><div class="panel-head"><h2>Sorteio da semana</h2>
+      <button class="btn sm" onclick="window.__tab('raffles')">Ver sorteios</button></div>
+      <div class="panel-body">${current
+        ? `<p class="muted" style="margin:0">${esc(current.title)} — ${statusTag(current.status)}</p>`
+        : '<p class="muted" style="margin:0">Nenhum sorteio ativo. Crie um na aba Sorteios.</p>'}</div></div>
+    <div class="panel"><div class="panel-head"><h2>Atalhos</h2></div>
+      <div class="panel-body" style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn line" onclick="window.__tab('employees')">Importar funcionários</button>
+        <button class="btn line" onclick="window.__tab('benefits')">Novo benefício</button>
+        <button class="btn line" onclick="window.__tab('raffles')">Criar sorteio</button>
+      </div></div>`;
+}
+
+// ============================================================================
+// BENEFÍCIOS
+// ============================================================================
+function benefitsView() {
+  const rows = S.benefits.map(b => `<tr>
+    <td>${iconBox(b)}</td>
+    <td><b>${esc(b.name)}</b><br><span class="muted" style="font-size:12px">${esc(b.category)}</span></td>
+    <td>${(b.profileIds || []).length ? (b.profileIds || []).map(pid => esc(profileName(pid))).join(', ') : '<span class="muted">Todos</span>'}</td>
+    <td>${b.active !== false ? '<span class="tag on">Ativo</span>' : '<span class="tag off">Inativo</span>'}
+      ${b.actionRequired ? ' <span class="tag warn">Ação</span>' : ''}</td>
+    <td>${b.order || 0}</td>
+    <td><div class="row-actions">
+      <button class="btn sm line" onclick="window.__editBenefit('${b.id}')">Editar</button>
+      <button class="btn sm danger" onclick="window.__delBenefit('${b.id}')">Excluir</button></div></td>
+  </tr>`).join('');
+  return head('Benefícios', 'Cadastre, ative/inative e ordene os benefícios.',
+    `<button class="btn" onclick="window.__editBenefit('')">+ Novo benefício</button>`) + `
+    <div class="panel"><table>
+      <thead><tr><th>Ícone</th><th>Nome</th><th>Perfis</th><th>Status</th><th>Ordem</th><th></th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6"><div class="empty">Nenhum benefício ainda. Clique em “Novo benefício”.</div></td></tr>'}</tbody>
+    </table></div>` + (S.editingBenefit !== null ? benefitModal() : '');
+}
+function iconBox(b) {
+  const fit = b.iconFit === 'cover' ? 'cover' : 'contain';
+  const bg = CARD_COLORS[(b.color || 0) % CARD_COLORS.length];
+  const inner = b.iconBase64 ? `<img src="${escAttr(b.iconBase64)}" alt="">` : esc(b.icon || '💸');
+  return `<div class="icon-box ${fit}" style="background:${bg}">${inner}</div>`;
+}
+function profileName(pid) { return S.profiles.find(p => p.id === pid)?.name || pid; }
+
+function editBenefit(bid) {
+  S.editingBenefit = bid ? { ...S.benefits.find(b => b.id === bid) } : {
+    name: '', category: '', description: '', details: '', icon: '🎁', iconFit: 'contain',
+    iconBase64: '', color: 0, active: true, actionRequired: false, responsible: '',
+    startDate: '', endDate: '', order: (S.benefits.length + 1), profileIds: [], links: [], documents: []
+  };
+  render();
+}
+function benefitModal() {
+  const b = S.editingBenefit;
+  const links = [...(b.links || []), ...(b.documents || [])];
+  return `<div class="modal-bg" onclick="if(event.target===this)window.__closeBenefit()"><div class="modal">
+    <div class="modal-head"><h2>${b.id ? 'Editar' : 'Novo'} benefício</h2>
+      <button class="x" onclick="window.__closeBenefit()">×</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="full"><label class="lbl">Nome</label><input class="field" id="bf-name" value="${escAttr(b.name)}"></div>
+        <div><label class="lbl">Categoria</label><input class="field" id="bf-category" value="${escAttr(b.category)}" placeholder="Saúde, Convênio…"></div>
+        <div><label class="lbl">Ordem de exibição</label><input class="field" id="bf-order" type="number" value="${Number(b.order || 0)}"></div>
+        <div class="full"><label class="lbl">Descrição (resumo no card)</label><textarea class="field" id="bf-description">${esc(b.description)}</textarea></div>
+        <div class="full"><label class="lbl">Regras detalhadas (opcional)</label><textarea class="field" id="bf-details">${esc(b.details)}</textarea></div>
+        <div><label class="lbl">Responsável interno (opcional)</label><input class="field" id="bf-responsible" value="${escAttr(b.responsible)}"></div>
+        <div><label class="lbl">Emoji do ícone (se não usar imagem)</label><input class="field" id="bf-icon" value="${escAttr(b.icon)}" maxlength="4"></div>
+        <div><label class="lbl">Início (opcional)</label><input class="field" id="bf-startDate" type="date" value="${escAttr(b.startDate)}"></div>
+        <div><label class="lbl">Fim (opcional)</label><input class="field" id="bf-endDate" type="date" value="${escAttr(b.endDate)}"></div>
+        <div class="full"><label class="lbl">Logo/ícone (imagem)</label>
+          <div style="display:flex;gap:12px;align-items:center">
+            <div id="bf-iconPreview">${iconBox(b)}</div>
+            <input type="file" accept="image/*" id="bf-iconFile" onchange="window.__benefitIcon(this)">
+            ${b.iconBase64 ? `<button class="btn sm line" onclick="window.__clearBenefitIcon()">Remover imagem</button>` : ''}
+          </div>
+          <div style="margin-top:10px;display:flex;gap:18px">
+            <label class="check"><input type="radio" name="bf-fit" value="contain" ${b.iconFit !== 'cover' ? 'checked' : ''}> Conter (logo inteiro)</label>
+            <label class="check"><input type="radio" name="bf-fit" value="cover" ${b.iconFit === 'cover' ? 'checked' : ''}> Preencher (corta bordas)</label>
+          </div></div>
+        <div class="full"><label class="lbl">Cor do card</label>
+          <div class="chips">${CARD_COLORS.map((c, i) =>
+            `<span class="chip ${(b.color || 0) === i ? 'on' : ''}" style="${(b.color || 0) === i ? '' : 'border-color:' + c}" onclick="window.__benefitColor(${i})">
+              <span style="width:14px;height:14px;border-radius:50%;background:${c};display:inline-block"></span></span>`).join('')}</div></div>
+        <div class="full"><label class="lbl">Perfis que veem este benefício (nenhum = todos)</label>
+          <div class="chips">${S.profiles.map(p =>
+            `<span class="chip ${(b.profileIds || []).includes(p.id) ? 'on' : ''}" onclick="window.__benefitProfile('${p.id}')">${esc(p.name)}</span>`).join('')}</div></div>
+        <div class="full"><label class="check"><input type="checkbox" id="bf-active" ${b.active !== false ? 'checked' : ''}> Benefício ativo</label></div>
+        <div class="full"><label class="check"><input type="checkbox" id="bf-actionRequired" ${b.actionRequired ? 'checked' : ''}> Selo “Ação necessária”</label></div>
+        <div class="full"><label class="lbl">Links e documentos</label>
+          <div id="bf-links">${links.map((l, i) => linkRow(l, i)).join('')}</div>
+          <button class="btn sm line" style="margin-top:8px" onclick="window.__addLink()">+ Adicionar link</button></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn line" onclick="window.__closeBenefit()">Cancelar</button>
+      <button class="btn" onclick="window.__saveBenefit()">Salvar benefício</button>
+    </div></div></div>`;
+}
+function linkRow(l, i) {
+  return `<div class="link-row" data-i="${i}" style="display:flex;gap:8px;margin-bottom:8px">
+    <input class="field lk-label" placeholder="Rótulo (ex: Rede credenciada)" value="${escAttr(l.label || '')}">
+    <input class="field lk-url" placeholder="https://…" value="${escAttr(l.url || '')}">
+    <button class="btn sm danger" onclick="this.parentElement.remove()">×</button></div>`;
+}
+
+// Mutações no benefício em edição
+function benefitColor(i) { S.editingBenefit.color = i; render(); }
+function benefitProfile(pid) {
+  const arr = S.editingBenefit.profileIds || [];
+  S.editingBenefit.profileIds = arr.includes(pid) ? arr.filter(x => x !== pid) : [...arr, pid];
+  syncBenefitForm(); render();
+}
+async function benefitIcon(input) {
+  const file = input.files?.[0]; if (!file) return;
+  S.editingBenefit.iconBase64 = await readFileDataURL(file);
+  syncBenefitForm(); render();
+}
+function clearBenefitIcon() { S.editingBenefit.iconBase64 = ''; syncBenefitForm(); render(); }
+function addLink() {
+  const c = document.getElementById('bf-links');
+  const div = document.createElement('div');
+  div.innerHTML = linkRow({}, Date.now());
+  c.appendChild(div.firstElementChild);
+}
+// Lê os campos do formulário de volta para o estado (antes de re-render).
+function syncBenefitForm() {
+  const b = S.editingBenefit; if (!b) return;
+  const g = id => document.getElementById(id);
+  if (g('bf-name')) b.name = g('bf-name').value;
+  if (g('bf-category')) b.category = g('bf-category').value;
+  if (g('bf-order')) b.order = Number(g('bf-order').value || 0);
+  if (g('bf-description')) b.description = g('bf-description').value;
+  if (g('bf-details')) b.details = g('bf-details').value;
+  if (g('bf-responsible')) b.responsible = g('bf-responsible').value;
+  if (g('bf-icon')) b.icon = g('bf-icon').value;
+  if (g('bf-startDate')) b.startDate = g('bf-startDate').value;
+  if (g('bf-endDate')) b.endDate = g('bf-endDate').value;
+  if (g('bf-active')) b.active = g('bf-active').checked;
+  if (g('bf-actionRequired')) b.actionRequired = g('bf-actionRequired').checked;
+  const fit = document.querySelector('input[name="bf-fit"]:checked');
+  if (fit) b.iconFit = fit.value;
+  collectLinks();
+}
+function collectLinks() {
+  const b = S.editingBenefit;
+  const rows = [...document.querySelectorAll('#bf-links .link-row')];
+  const links = rows.map(r => ({
+    label: r.querySelector('.lk-label').value.trim(),
+    url: r.querySelector('.lk-url').value.trim()
+  })).filter(l => l.url);
+  b.links = links; b.documents = [];
+}
+async function saveBenefit() {
+  syncBenefitForm();
+  const b = S.editingBenefit;
+  if (!b.name.trim()) { toast('Informe o nome do benefício.'); return; }
+  const savedId = await DB.saveBenefit(b);
+  await DB.logAudit({ action: b.id ? 'update' : 'create', entity: 'benefit', entityId: savedId, userEmail: S.user.email, detail: b.name });
+  S.editingBenefit = null;
+  S.benefits = await DB.listBenefits();
+  toast('Benefício salvo.');
+  render();
+}
+async function delBenefit(bid) {
+  const b = S.benefits.find(x => x.id === bid);
+  if (!confirm(`Excluir o benefício “${b?.name}”? Esta ação não pode ser desfeita.`)) return;
+  await DB.deleteBenefit(bid);
+  await DB.logAudit({ action: 'delete', entity: 'benefit', entityId: bid, userEmail: S.user.email, detail: b?.name });
+  S.benefits = await DB.listBenefits();
+  toast('Benefício excluído.');
+  render();
+}
+
+// ============================================================================
+// PERFIS
+// ============================================================================
+function profilesView() {
+  const rows = S.profiles.map(p => `<tr>
+    <td><b>${esc(p.name)}</b></td>
+    <td class="muted">${esc(p.description || '—')}</td>
+    <td><div class="row-actions">
+      <button class="btn sm line" onclick="window.__editProfile('${p.id}')">Editar</button>
+      <button class="btn sm danger" onclick="window.__delProfile('${p.id}')">Excluir</button></div></td>
+  </tr>`).join('');
+  return head('Perfis', 'Os perfis ligam funcionários e benefícios. A coluna “Perfil” da planilha é casada por nome.',
+    `<button class="btn" onclick="window.__editProfile('')">+ Novo perfil</button>`) + `
+    <div class="panel"><table>
+      <thead><tr><th>Nome</th><th>Descrição</th><th></th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="3"><div class="empty">Nenhum perfil.</div></td></tr>'}</tbody></table></div>`
+    + (S.editingProfile !== null ? profileModal() : '');
+}
+function editProfile(pid) {
+  S.editingProfile = pid ? { ...S.profiles.find(p => p.id === pid) } : { name: '', description: '' };
+  render();
+}
+function profileModal() {
+  const p = S.editingProfile;
+  return `<div class="modal-bg" onclick="if(event.target===this)window.__closeProfile()"><div class="modal" style="width:min(480px,100%)">
+    <div class="modal-head"><h2>${p.id ? 'Editar' : 'Novo'} perfil</h2><button class="x" onclick="window.__closeProfile()">×</button></div>
+    <div class="modal-body">
+      <label class="lbl">Nome (deve casar com a coluna “Perfil” da planilha)</label>
+      <input class="field" id="pf-name" value="${escAttr(p.name)}" style="margin-bottom:14px">
+      <label class="lbl">Descrição (opcional)</label>
+      <input class="field" id="pf-description" value="${escAttr(p.description || '')}">
+    </div>
+    <div class="modal-foot"><button class="btn line" onclick="window.__closeProfile()">Cancelar</button>
+      <button class="btn" onclick="window.__saveProfile()">Salvar</button></div></div></div>`;
+}
+async function saveProfile() {
+  const p = S.editingProfile;
+  p.name = document.getElementById('pf-name').value.trim();
+  p.description = document.getElementById('pf-description').value.trim();
+  if (!p.name) { toast('Informe o nome do perfil.'); return; }
+  const sid = await DB.saveProfile(p);
+  await DB.logAudit({ action: p.id ? 'update' : 'create', entity: 'profile', entityId: sid, userEmail: S.user.email, detail: p.name });
+  S.editingProfile = null;
+  S.profiles = await DB.listProfiles();
+  toast('Perfil salvo.'); render();
+}
+async function delProfile(pid) {
+  const p = S.profiles.find(x => x.id === pid);
+  if (!confirm(`Excluir o perfil “${p?.name}”?`)) return;
+  await DB.deleteProfile(pid);
+  await DB.logAudit({ action: 'delete', entity: 'profile', entityId: pid, userEmail: S.user.email, detail: p?.name });
+  S.profiles = await DB.listProfiles();
+  toast('Perfil excluído.'); render();
+}
+
+// ============================================================================
+// FUNCIONÁRIOS + IMPORTAÇÃO
+// ============================================================================
+function employeesView() {
+  const rows = S.employees.map(e => `<tr>
+    <td><b>${esc(e.name || '—')}</b></td>
+    <td class="muted">${esc(e.cpfMasked || '—')}</td>
+    <td>${(e.profileIds || []).length
+      ? (e.profileIds || []).map(pid => esc(profileName(pid))).join(', ')
+      : `<span class="tag warn">Sem perfil</span> <span class="muted" style="font-size:12px">${esc(e.profileRaw || '')}</span>`}</td>
+    <td class="muted">${esc(e.unit || '')}</td>
+  </tr>`).join('');
+  const withoutProfile = S.employees.filter(e => !(e.profileIds || []).length).length;
+  return head('Funcionários', `Base ativa: ${S.employees.length} funcionário(s). A importação substitui toda a base.`,
+    `<button class="btn" onclick="window.__importDialog()">📥 Importar planilha</button>`) +
+    (withoutProfile ? `<div class="hint">⚠️ ${withoutProfile} funcionário(s) sem perfil reconhecido. Eles entram na base, mas só veem benefícios sem restrição de perfil. Confira se o nome do perfil na planilha bate com os cadastrados.</div>` : '') + `
+    <div class="panel"><table>
+      <thead><tr><th>Nome</th><th>CPF</th><th>Perfil</th><th>Unidade</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="4"><div class="empty">Base vazia. Importe uma planilha para começar.</div></td></tr>'}</tbody>
+    </table></div>` + (S.importPreview !== null ? importModal() : '');
+}
+
+function importDialog() {
+  S.importPreview = { stage: 'pick', rows: [], fileName: '', summary: null };
+  render();
+}
+function importModal() {
+  const p = S.importPreview;
+  let body = '';
+  if (p.stage === 'pick') {
+    body = `<div class="hint">A planilha deve ter as colunas <b>Nome</b>, <b>CPF</b> e <b>Perfil</b>.
+      Colunas opcionais reconhecidas: unidade, departamento, cargo, situação, data de admissão, matrícula.
+      Aceita .xlsx, .xls ou .csv.</div>
+      <label class="dropzone" for="imp-file">📄 Clique para escolher a planilha<br><span style="font-size:12px">ou arraste o arquivo aqui</span></label>
+      <input type="file" id="imp-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="window.__importFile(this)">`;
+  } else if (p.stage === 'preview') {
+    const sample = p.rows.slice(0, 8);
+    body = `<div class="hint">Arquivo: <b>${esc(p.fileName)}</b> — ${p.rows.length} linha(s) lida(s).
+      Confira a amostra abaixo. Ao confirmar, <b>toda a base anterior será substituída</b>.</div>
+      <div style="overflow:auto;max-height:300px;border:1px solid var(--line);border-radius:12px">
+      <table><thead><tr><th>Nome</th><th>CPF</th><th>Perfil</th><th>Unidade</th></tr></thead><tbody>
+      ${sample.map(r => `<tr><td>${esc(r.name)}</td><td>${esc(cpfSafe(r.cpf))}</td><td>${esc(r.profile || '')}</td><td>${esc(r.unit || '')}</td></tr>`).join('')}
+      </tbody></table></div>
+      ${p.rows.length > 8 ? `<p class="muted" style="font-size:13px">…e mais ${p.rows.length - 8} linha(s).</p>` : ''}`;
+  } else if (p.stage === 'done') {
+    const s = p.summary;
+    body = `<div class="hint" style="background:var(--okSoft);color:var(--ok)">✅ Importação concluída.</div>
+      <div class="cards-grid">
+        <div class="kpi"><b>${s.totalEmployees}</b><span>na base agora</span></div>
+        <div class="kpi"><b>${s.totalAdded}</b><span>adicionados</span></div>
+        <div class="kpi"><b>${s.totalRemoved}</b><span>removidos</span></div>
+        <div class="kpi"><b>${s.withoutProfile}</b><span>sem perfil</span></div>
+      </div>`;
+  }
+  const foot = p.stage === 'preview'
+    ? `<button class="btn line" onclick="window.__closeImport()">Cancelar</button>
+       <button class="btn" id="imp-confirm" onclick="window.__confirmImport()">Substituir base (${p.rows.length})</button>`
+    : `<button class="btn" onclick="window.__closeImport()">Fechar</button>`;
+  return `<div class="modal-bg"><div class="modal">
+    <div class="modal-head"><h2>Importar funcionários</h2><button class="x" onclick="window.__closeImport()">×</button></div>
+    <div class="modal-body">${body}</div>
+    <div class="modal-foot">${foot}</div></div></div>`;
+}
+
+// Normaliza cabeçalho de coluna (sem acento, minúsculo) p/ casar nomes.
+function normHeader(h) {
+  return String(h || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+async function importFile(input) {
+  const file = input.files?.[0]; if (!file) return;
+  if (typeof XLSX === 'undefined') { toast('Biblioteca de leitura não carregou. Recarregue a página.'); return; }
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    const map = { name: ['nome', 'funcionario', 'colaborador'], cpf: ['cpf'], profile: ['perfil'],
+      unit: ['unidade', 'filial'], department: ['departamento', 'setor'], role: ['cargo', 'funcao'],
+      situation: ['situacao'], admissionDate: ['data de admissao', 'admissao'], registry: ['matricula'] };
+    const rows = raw.map(r => {
+      const keys = Object.keys(r);
+      const pick = (aliases) => {
+        const k = keys.find(k => aliases.includes(normHeader(k)));
+        return k ? r[k] : '';
+      };
+      const out = {};
+      for (const field in map) out[field] = pick(map[field]);
+      return out;
+    }).filter(r => String(r.cpf).replace(/\D/g, '').length >= 8 && String(r.name).trim());
+    if (!rows.length) { toast('Nenhuma linha válida encontrada (precisa de Nome e CPF).'); return; }
+    S.importPreview = { stage: 'preview', rows, fileName: file.name, summary: null };
+    render();
+  } catch (e) {
+    toast('Erro ao ler a planilha: ' + (e.message || e));
+  }
+}
+async function confirmImport() {
+  const p = S.importPreview;
+  const btn = document.getElementById('imp-confirm');
+  if (btn) { btn.disabled = true; btn.textContent = 'Importando…'; }
+  const importId = 'imp_' + id();
+  const summary = await DB.importEmployees(p.rows, { importId, fileName: p.fileName, userEmail: S.user.email });
+  await DB.saveImportRecord(summary);
+  await DB.logAudit({ action: 'import', entity: 'employees', entityId: importId, userEmail: S.user.email,
+    detail: `${summary.totalEmployees} na base, +${summary.totalAdded}/-${summary.totalRemoved}` });
+  S.importPreview = { stage: 'done', summary };
+  S.employees = await DB.listEmployees();
+  render();
+}
+
+// ============================================================================
+// IMPORTAÇÕES (histórico)
+// ============================================================================
+function importsView() {
+  const rows = S.imports.map(im => `<tr>
+    <td>${esc(dt(im.createdAt))}</td>
+    <td>${esc(im.fileName || '—')}</td>
+    <td class="muted">${esc(im.createdBy || '—')}</td>
+    <td>${im.totalEmployees}</td>
+    <td>+${im.totalAdded}</td>
+    <td>-${im.totalRemoved}</td>
+  </tr>`).join('');
+  return head('Importações', 'Histórico de substituições da base de funcionários.') + `
+    <div class="panel"><table>
+      <thead><tr><th>Data/hora</th><th>Arquivo</th><th>Responsável</th><th>Total</th><th>Adic.</th><th>Remov.</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6"><div class="empty">Nenhuma importação ainda.</div></td></tr>'}</tbody></table></div>`;
+}
+
+// ============================================================================
+// SORTEIOS
+// ============================================================================
+function rafflesView() {
+  if (S.viewingRaffle) return raffleDetailView();
+  const rows = S.raffles.map(r => `<tr>
+    <td><b>${esc(r.title)}</b><br><span class="muted" style="font-size:12px">${(r.films || []).length} filme(s)</span></td>
+    <td>${statusTag(r.status)}</td>
+    <td class="muted">${r.startAt ? esc(dt(r.startAt)) : '—'}</td>
+    <td><div class="row-actions">
+      <button class="btn sm line" onclick="window.__viewRaffle('${r.id}')">Abrir</button>
+      <button class="btn sm danger" onclick="window.__delRaffle('${r.id}')">Excluir</button></div></td>
+  </tr>`).join('');
+  return head('Sorteios', 'Crie o sorteio da semana, acompanhe inscritos, sorteie e publique.',
+    `<button class="btn" onclick="window.__editRaffle('')">+ Novo sorteio</button>`) + `
+    <div class="panel"><table>
+      <thead><tr><th>Título</th><th>Status</th><th>Início inscrições</th><th></th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="4"><div class="empty">Nenhum sorteio. Crie o primeiro.</div></td></tr>'}</tbody></table></div>`
+    + (S.editingRaffle !== null ? raffleModal() : '');
+}
+function statusTag(st) {
+  const labels = { draft: 'Rascunho', open: 'Inscrições abertas', closed: 'Fechado', drawn: 'Sorteado', published: 'Publicado' };
+  return `<span class="tag ${st}">${labels[st] || st}</span>`;
+}
+function editRaffle(rid) {
+  S.editingRaffle = rid ? { ...S.raffles.find(r => r.id === rid) } : {
+    title: 'Sorteio do Cinema', description: '', status: 'draft',
+    startAt: nowLocalForInput(), endAt: '', films: [{ id: 'flm_' + id(), title: '', quantity: 1, active: true }]
+  };
+  render();
+}
+function raffleModal() {
+  const r = S.editingRaffle;
+  return `<div class="modal-bg" onclick="if(event.target===this)window.__closeRaffle()"><div class="modal">
+    <div class="modal-head"><h2>${r.id ? 'Editar' : 'Novo'} sorteio</h2><button class="x" onclick="window.__closeRaffle()">×</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="full"><label class="lbl">Título</label><input class="field" id="rf-title" value="${escAttr(r.title)}"></div>
+        <div class="full"><label class="lbl">Descrição (opcional)</label><input class="field" id="rf-description" value="${escAttr(r.description || '')}"></div>
+        <div><label class="lbl">Início das inscrições</label><input class="field" id="rf-startAt" type="datetime-local" value="${escAttr(r.startAt || '')}"></div>
+        <div><label class="lbl">Fim das inscrições</label><input class="field" id="rf-endAt" type="datetime-local" value="${escAttr(r.endAt || '')}"></div>
+        <div class="full"><label class="lbl">Status</label>
+          <select class="field" id="rf-status">
+            ${['draft', 'open', 'closed'].map(s => `<option value="${s}" ${r.status === s ? 'selected' : ''}>${statusLabel(s)}</option>`).join('')}
+          </select>
+          <p class="muted" style="font-size:12px;margin:6px 0 0">Use “Inscrições abertas” para liberar a participação. Sortear/publicar é feito na tela do sorteio.</p></div>
+        <div class="full"><label class="lbl">Filmes e ingressos</label>
+          <div id="rf-films">${(r.films || []).map(f => filmRow(f)).join('')}</div>
+          <button class="btn sm line" style="margin-top:8px" onclick="window.__addFilm()">+ Adicionar filme</button></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn line" onclick="window.__closeRaffle()">Cancelar</button>
+      <button class="btn" onclick="window.__saveRaffle()">Salvar sorteio</button></div></div></div>`;
+}
+function statusLabel(s) { return { draft: 'Rascunho', open: 'Inscrições abertas', closed: 'Fechado' }[s] || s; }
+function filmRow(f) {
+  return `<div class="film-row" data-id="${escAttr(f.id || '')}" style="display:flex;gap:8px;margin-bottom:8px">
+    <input class="field fr-title" placeholder="Nome do filme" value="${escAttr(f.title || '')}" style="flex:2">
+    <input class="field fr-qty" type="number" min="0" placeholder="Ingressos" value="${Number(f.quantity || 0)}" style="flex:1">
+    <button class="btn sm danger" onclick="this.parentElement.remove()">×</button></div>`;
+}
+function addFilm() {
+  const c = document.getElementById('rf-films');
+  const div = document.createElement('div');
+  div.innerHTML = filmRow({ id: 'flm_' + id(), quantity: 1 });
+  c.appendChild(div.firstElementChild);
+}
+function readRaffleForm() {
+  const r = S.editingRaffle;
+  r.title = document.getElementById('rf-title').value.trim() || 'Sorteio do Cinema';
+  r.description = document.getElementById('rf-description').value.trim();
+  r.startAt = document.getElementById('rf-startAt').value;
+  r.endAt = document.getElementById('rf-endAt').value;
+  r.status = document.getElementById('rf-status').value;
+  r.films = [...document.querySelectorAll('#rf-films .film-row')].map(row => ({
+    id: row.dataset.id || 'flm_' + id(),
+    title: row.querySelector('.fr-title').value.trim(),
+    quantity: Number(row.querySelector('.fr-qty').value || 0),
+    active: true
+  })).filter(f => f.title);
+}
+async function saveRaffle() {
+  readRaffleForm();
+  const r = S.editingRaffle;
+  if (!r.films.length) { toast('Cadastre ao menos um filme.'); return; }
+  const sid = await DB.saveRaffle(r);
+  await DB.logAudit({ action: r.id ? 'update' : 'create', entity: 'raffle', entityId: sid, userEmail: S.user.email, detail: r.title });
+  S.editingRaffle = null;
+  S.raffles = await DB.listRaffles();
+  toast('Sorteio salvo.'); render();
+}
+async function delRaffle(rid) {
+  const r = S.raffles.find(x => x.id === rid);
+  if (!confirm(`Excluir o sorteio “${r?.title}”?`)) return;
+  await DB.deleteRaffle(rid);
+  await DB.logAudit({ action: 'delete', entity: 'raffle', entityId: rid, userEmail: S.user.email, detail: r?.title });
+  S.raffles = await DB.listRaffles();
+  toast('Sorteio excluído.'); render();
+}
+
+async function viewRaffle(rid) {
+  S.viewingRaffle = await DB.getRaffle(rid);
+  S.viewingRaffle._entries = await DB.listEntries(rid);
+  S.viewingRaffle._winners = await DB.listWinners(rid);
+  render();
+}
+function raffleDetailView() {
+  const r = S.viewingRaffle;
+  const entries = r._entries || [];
+  const winners = r._winners || [];
+  const byFilm = r.films.map(f => ({
+    film: f,
+    count: entries.filter(e => e.filmId === f.id).length,
+    winners: winners.filter(w => w.filmId === f.id)
+  }));
+  const canDraw = r.status === 'open' || r.status === 'closed';
+  const canPublish = r.status === 'drawn';
+
+  const actions = `
+    <button class="btn line" onclick="window.__backRaffles()">← Voltar</button>
+    ${canDraw ? `<button class="btn" onclick="window.__draw('${r.id}')">🎲 Realizar sorteio</button>` : ''}
+    ${canPublish ? `<button class="btn" onclick="window.__publish('${r.id}')">📣 Publicar resultado</button>` : ''}`;
+
+  return `<div class="rh-head"><div><h1>${esc(r.title)}</h1>
+    <p>${statusLabel(r.status) || ''} · ${entries.length} inscrito(s)</p></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">${actions}</div></div>
+    ${statusTag(r.status)}
+    <div class="cards-grid" style="margin-top:16px">
+      <div class="kpi"><b>${entries.length}</b><span>inscritos</span></div>
+      <div class="kpi"><b>${r.films.length}</b><span>filmes</span></div>
+      <div class="kpi"><b>${r.films.reduce((s, f) => s + Number(f.quantity || 0), 0)}</b><span>ingressos</span></div>
+      <div class="kpi"><b>${winners.length}</b><span>ganhadores</span></div>
+    </div>
+    ${byFilm.map(x => `<div class="panel"><div class="panel-head">
+      <h2>${esc(x.film.title)}</h2>
+      <span class="muted">${x.count} inscrito(s) · ${x.film.quantity} ingresso(s)</span></div>
+      <div class="panel-body">
+        ${x.winners.length ? `<table><thead><tr><th>Ganhador</th><th>Voucher</th></tr></thead><tbody>
+          ${x.winners.map(w => `<tr><td>${esc(w.employeeName || '—')}</td><td><code>${esc(w.voucherCode)}</code></td></tr>`).join('')}
+        </tbody></table>` : '<p class="muted" style="margin:0">Sem ganhadores ainda.</p>'}
+      </div></div>`).join('')}`;
+}
+async function draw(rid) {
+  if (!confirm('Realizar o sorteio agora? Os ganhadores serão definidos. Você ainda precisará publicar o resultado depois.')) return;
+  try {
+    const winners = await DB.drawRaffle(rid);
+    await DB.logAudit({ action: 'draw', entity: 'raffle', entityId: rid, userEmail: S.user.email, detail: `${winners.length} ganhador(es)` });
+    toast(`Sorteio realizado: ${winners.length} ganhador(es).`);
+    await viewRaffle(rid);
+    S.raffles = await DB.listRaffles();
+  } catch (e) { toast(e.message || 'Erro ao sortear.'); }
+}
+async function publish(rid) {
+  if (!confirm('Publicar o resultado? Os funcionários passarão a ver se foram contemplados.')) return;
+  await DB.publishRaffle(rid);
+  await DB.logAudit({ action: 'publish', entity: 'raffle', entityId: rid, userEmail: S.user.email });
+  toast('Resultado publicado.');
+  await viewRaffle(rid);
+  S.raffles = await DB.listRaffles();
+}
+
+// ============================================================================
+// CONFIGURAÇÕES
+// ============================================================================
+function settingsView() {
+  return head('Configurações', 'Nome do portal, empresa e aviso de privacidade.') + `
+    <div class="panel"><div class="panel-body">
+      <div class="form-grid">
+        <div><label class="lbl">Nome do portal</label><input class="field" id="st-portalName" value="${escAttr(S.settings?.portalName || '')}"></div>
+        <div><label class="lbl">Empresa</label><input class="field" id="st-companyName" value="${escAttr(S.settings?.companyName || '')}"></div>
+        <div class="full"><label class="lbl">Texto de privacidade (LGPD)</label>
+          <textarea class="field" id="st-privacyText" style="min-height:90px">${esc(S.settings?.privacyText || '')}</textarea></div>
+      </div>
+      <div style="margin-top:16px"><button class="btn" onclick="window.__saveSettings()">Salvar configurações</button></div>
+    </div></div>`;
+}
+async function saveSettings() {
+  const data = {
+    portalName: document.getElementById('st-portalName').value.trim(),
+    companyName: document.getElementById('st-companyName').value.trim(),
+    privacyText: document.getElementById('st-privacyText').value.trim()
+  };
+  await DB.saveSettings(data);
+  await DB.logAudit({ action: 'update', entity: 'settings', userEmail: S.user.email });
+  S.settings = await DB.getSettings();
+  toast('Configurações salvas.');
+}
+
+// ============================================================================
+// AUDITORIA
+// ============================================================================
+function auditView() {
+  const rows = S.audit.map(a => `<tr>
+    <td class="muted">${esc(dt(a.createdAt))}</td>
+    <td><span class="tag ${a.action === 'delete' ? 'off' : 'on'}">${esc(a.action)}</span></td>
+    <td>${esc(a.entity)}</td>
+    <td class="muted">${esc(a.detail || '')}</td>
+    <td class="muted" style="font-size:12px">${esc(a.userEmail || '')}</td>
+  </tr>`).join('');
+  return head('Auditoria', 'Registro das ações administrativas (últimas 100).') + `
+    <div class="panel"><table>
+      <thead><tr><th>Data/hora</th><th>Ação</th><th>Entidade</th><th>Detalhe</th><th>Usuário</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="5"><div class="empty">Sem registros ainda.</div></td></tr>'}</tbody></table></div>`;
+}
+
+// ============================================================================
+// Após render: carrega settings na primeira vez
+// ============================================================================
+async function postRender() {
+  if (S.user && !S.settings) { S.settings = await DB.getSettings(); }
+}
+
+// --- Handlers globais (onclick inline) --------------------------------------
+Object.assign(window, {
+  __login: doLogin, __logout: doLogout, __tab: goTab,
+  __editBenefit: editBenefit, __closeBenefit: () => { S.editingBenefit = null; render(); },
+  __saveBenefit: saveBenefit, __delBenefit: delBenefit,
+  __benefitColor: benefitColor, __benefitProfile: benefitProfile,
+  __benefitIcon: benefitIcon, __clearBenefitIcon: clearBenefitIcon, __addLink: addLink,
+  __editProfile: editProfile, __closeProfile: () => { S.editingProfile = null; render(); },
+  __saveProfile: saveProfile, __delProfile: delProfile,
+  __importDialog: importDialog, __closeImport: () => { S.importPreview = null; render(); },
+  __importFile: importFile, __confirmImport: confirmImport,
+  __editRaffle: editRaffle, __closeRaffle: () => { S.editingRaffle = null; render(); },
+  __saveRaffle: saveRaffle, __delRaffle: delRaffle, __addFilm: addFilm,
+  __viewRaffle: viewRaffle, __backRaffles: () => { S.viewingRaffle = null; render(); },
+  __draw: draw, __publish: publish,
+  __saveSettings: saveSettings
+});
+
+</script>
+</body></html>
