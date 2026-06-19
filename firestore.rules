@@ -1,0 +1,73 @@
+rules_version = '2';
+
+// ============================================================================
+// Regras de segurança do Firestore — Portal de Benefícios Raguife
+//
+// Modelo:
+//   - RH/DP autentica com e-mail/senha (Firebase Auth). isRH() = está logado.
+//   - O FUNCIONÁRIO NÃO autentica. Ele só consegue LER o próprio documento,
+//     porque o ID do documento é o hash do CPF dele (employees/{cpfHash}).
+//     Ele faz um "get" direto pelo id — não consegue listar/baixar a coleção.
+//   - Inscrição no sorteio: o funcionário só pode CRIAR (1ª vez). A segunda
+//     tentativa no mesmo sorteio é um "update", que é negado → trava natural.
+//   - Não existe lista pública de ganhadores (cada um vê só o próprio).
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isRH() {
+      return request.auth != null;
+    }
+
+    // Conteúdo do portal: leitura pública (sem dados pessoais), escrita só RH.
+    match /settings/{doc} {
+      allow read: if true;
+      allow write: if isRH();
+    }
+    match /profiles/{doc} {
+      allow read: if true;
+      allow write: if isRH();
+    }
+    match /benefits/{doc} {
+      allow read: if true;
+      allow write: if isRH();
+    }
+    match /raffles/{doc} {
+      allow read: if true;
+      allow write: if isRH();
+    }
+
+    // Funcionários: "get" por id (= hash do CPF) liberado, pois só quem sabe o
+    // CPF consegue montar o id. "list" (enumerar a coleção) é só do RH.
+    match /employees/{cpfHash} {
+      allow get: if true;
+      allow list, write: if isRH();
+    }
+
+    // Inscrições no sorteio (id = raffleId_cpfHash):
+    //   - create liberado (funcionário se inscreve);
+    //   - get liberado (consulta a própria inscrição pelo id);
+    //   - update/delete/list só RH (a falta de update trava a 2ª inscrição).
+    match /raffle_entries/{entryId} {
+      allow get, create: if true;
+      allow update, delete, list: if isRH();
+    }
+
+    // Ganhadores (id = raffleId_cpfHash):
+    //   - get liberado (cada um vê só o próprio resultado pelo id);
+    //   - list/write só RH (sem lista pública de contemplados).
+    match /raffle_winners/{winnerId} {
+      allow get: if true;
+      allow list, write: if isRH();
+    }
+
+    // Apenas RH: histórico de importações e trilha de auditoria.
+    match /imports/{doc} {
+      allow read, write: if isRH();
+    }
+    match /audit_logs/{doc} {
+      allow read, write: if isRH();
+    }
+  }
+}
