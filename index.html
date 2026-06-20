@@ -101,6 +101,12 @@ body{font-family:var(--body);color:var(--ink);-webkit-font-smoothing:antialiased
 .body{padding-bottom:calc(16px + env(safe-area-inset-bottom, 0px))}
 .login{padding-top:calc(env(safe-area-inset-top,0px) + 16px);padding-bottom:calc(env(safe-area-inset-bottom,0px) + 16px)}
 
+/* === Selos Novo/Destaque + ênfase do card === */
+.badge.new{background:var(--accentSoft);color:#4d6a13}
+.badge.hot{background:#fff3d8;color:#b06b00}
+.card.benefit.featured{box-shadow:0 1px 0 rgba(2,79,43,.04),0 14px 30px rgba(2,79,43,.10);
+  outline:2px solid var(--accent);outline-offset:0}
+
 </style></head><body>
 <div id="root"><main class="login"><section class="login-card"><h1>Carregando…</h1></section></main></div>
 <div class="toast" id="toast"></div>
@@ -246,10 +252,11 @@ function readFileDataURL(file) {
   });
 }
 
-// Paleta dos cards de benefício (índice → cor).
+// Paleta dos cards de benefício (índice → cor). Tons com bom contraste p/ texto branco.
 const CARD_COLORS = [
-  '#024f2b', '#739630', '#0a6b3c', '#557024',
-  '#1f7a4d', '#666666', '#2c5ca8', '#b06b00'
+  '#024f2b', '#0a6b3c', '#1f7a4d', '#3d6b35', '#557024', '#739630', '#5a6b00',
+  '#0d7d6b', '#2c5ca8', '#1f3a8a', '#7a3e9d', '#a83246', '#b0392b', '#b06b00',
+  '#8a5a2b', '#4a4a4a'
 ];
 
 
@@ -359,6 +366,8 @@ function normalizeBenefit(b) {
     color: Number.isInteger(b.color) ? b.color : 0,
     active: b.active !== false,
     actionRequired: !!b.actionRequired,
+    featured: !!b.featured,
+    isNew: !!b.isNew,
     responsible: b.responsible || '',
     startDate: b.startDate || '',
     endDate: b.endDate || '',
@@ -403,6 +412,14 @@ async function getEmployeeByHash(h) {
   return { id: h, ...snap.data() };
 }
 
+// Atualiza só os perfis de UM funcionário (correção manual no RH).
+async function updateEmployeeProfiles(cpfHash, profileIds) {
+  await updateDoc(ref('employees', cpfHash), {
+    profileIds: Array.isArray(profileIds) ? profileIds : [],
+    updatedAt: Date.now()
+  });
+}
+
 // Listagem completa (somente RH).
 async function listEmployees() {
   const snap = await getDocs(col('employees'));
@@ -413,10 +430,15 @@ async function listEmployees() {
 
 // Mapeia o texto da coluna "Perfil" da planilha para ids de perfis cadastrados.
 function resolveProfileIds(profileText, profiles) {
-  const names = String(profileText || '')
-    .split(/[;,|/]/).map(x => x.trim().toLowerCase()).filter(Boolean);
+  const raw = String(profileText || '').trim().toLowerCase();
+  if (!raw) return [];
+  // 1) tenta casar o TEXTO INTEIRO com um perfil (cobre "Estagiário/Aprendiz")
+  const full = profiles.find(p => String(p.name).trim().toLowerCase() === raw);
+  if (full) return [full.id];
+  // 2) senão, divide por separadores e casa cada parte
+  const names = raw.split(/[;,|/]/).map(x => x.trim()).filter(Boolean);
   return profiles
-    .filter(p => names.includes(String(p.name).toLowerCase()))
+    .filter(p => names.includes(String(p.name).trim().toLowerCase()))
     .map(p => p.id);
 }
 
@@ -864,7 +886,9 @@ function renderHomeBody() {
   if (el && S.screen === 'home') el.innerHTML = homeBody();
 }
 function cardsHTML() {
-  const benefits = filteredBenefits();
+  const benefits = filteredBenefits()
+    .slice()
+    .sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
   return benefits.length
     ? benefits.map(benefitCard).join('')
     : '<div class="empty">Nenhum benefício encontrado para este filtro.</div>';
@@ -953,10 +977,12 @@ function homeBody() {
 
 function benefitCard(b) {
   const badges = [];
+  if (b.isNew) badges.push('<span class="badge new">Novo</span>');
+  if (b.featured) badges.push('<span class="badge hot">★ Destaque</span>');
   if (b.actionRequired) badges.push('<span class="badge warn">Ação necessária</span>');
   if (b.endDate) badges.push(`<span class="badge">Até ${esc(dateShort(b.endDate))}</span>`);
   const desc = String(b.description || '');
-  return `<button class="card benefit" onclick="window.__openBenefit('${b.id}')">
+  return `<button class="card benefit${b.featured ? ' featured' : ''}" onclick="window.__openBenefit('${b.id}')">
     <div class="brow">${iconHTML(b)}
       <div class="btitle"><h3>${esc(b.name)}</h3><span>${esc(b.category)}</span></div></div>
     ${badges.length ? `<div class="badges">${badges.join('')}</div>` : ''}

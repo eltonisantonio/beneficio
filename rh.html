@@ -365,10 +365,11 @@ function readFileDataURL(file) {
   });
 }
 
-// Paleta dos cards de benefício (índice → cor).
+// Paleta dos cards de benefício (índice → cor). Tons com bom contraste p/ texto branco.
 const CARD_COLORS = [
-  '#024f2b', '#739630', '#0a6b3c', '#557024',
-  '#1f7a4d', '#666666', '#2c5ca8', '#b06b00'
+  '#024f2b', '#0a6b3c', '#1f7a4d', '#3d6b35', '#557024', '#739630', '#5a6b00',
+  '#0d7d6b', '#2c5ca8', '#1f3a8a', '#7a3e9d', '#a83246', '#b0392b', '#b06b00',
+  '#8a5a2b', '#4a4a4a'
 ];
 
 
@@ -479,6 +480,8 @@ function normalizeBenefit(b) {
     color: Number.isInteger(b.color) ? b.color : 0,
     active: b.active !== false,
     actionRequired: !!b.actionRequired,
+    featured: !!b.featured,
+    isNew: !!b.isNew,
     responsible: b.responsible || '',
     startDate: b.startDate || '',
     endDate: b.endDate || '',
@@ -523,6 +526,14 @@ async function getEmployeeByHash(h) {
   return { id: h, ...snap.data() };
 }
 
+// Atualiza só os perfis de UM funcionário (correção manual no RH).
+async function updateEmployeeProfiles(cpfHash, profileIds) {
+  await updateDoc(ref('employees', cpfHash), {
+    profileIds: Array.isArray(profileIds) ? profileIds : [],
+    updatedAt: Date.now()
+  });
+}
+
 // Listagem completa (somente RH).
 async function listEmployees() {
   const snap = await getDocs(col('employees'));
@@ -533,10 +544,15 @@ async function listEmployees() {
 
 // Mapeia o texto da coluna "Perfil" da planilha para ids de perfis cadastrados.
 function resolveProfileIds(profileText, profiles) {
-  const names = String(profileText || '')
-    .split(/[;,|/]/).map(x => x.trim().toLowerCase()).filter(Boolean);
+  const raw = String(profileText || '').trim().toLowerCase();
+  if (!raw) return [];
+  // 1) tenta casar o TEXTO INTEIRO com um perfil (cobre "Estagiário/Aprendiz")
+  const full = profiles.find(p => String(p.name).trim().toLowerCase() === raw);
+  if (full) return [full.id];
+  // 2) senão, divide por separadores e casa cada parte
+  const names = raw.split(/[;,|/]/).map(x => x.trim()).filter(Boolean);
   return profiles
-    .filter(p => names.includes(String(p.name).toLowerCase()))
+    .filter(p => names.includes(String(p.name).trim().toLowerCase()))
     .map(p => p.id);
 }
 
@@ -831,7 +847,7 @@ async function listAudit(limitN = 100) {
   return out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, limitN);
 }
 
-return { DEFAULT_PROFILES, DEFAULT_SETTINGS, arrayUnionTitle, createEntry, deleteBenefit, deleteProfile, deleteRaffle, drawRaffle, entryKey, getCurrentRaffle, getEmployeeByCpf, getEmployeeByHash, getMyEntries, getMyWinner, getRaffle, getSettings, importEmployees, listAllWinners, listAudit, listBenefits, listEmployees, listEntries, listImports, listProfiles, listRaffles, listWinners, logAudit, normalizeBenefit, publishRaffle, resolveProfileIds, saveBenefit, saveImportRecord, saveProfile, saveRaffle, saveSettings, seedProfilesIfEmpty, winnerKey };
+return { DEFAULT_PROFILES, DEFAULT_SETTINGS, arrayUnionTitle, createEntry, deleteBenefit, deleteProfile, deleteRaffle, drawRaffle, entryKey, getCurrentRaffle, getEmployeeByCpf, getEmployeeByHash, getMyEntries, getMyWinner, getRaffle, getSettings, importEmployees, listAllWinners, listAudit, listBenefits, listEmployees, listEntries, listImports, listProfiles, listRaffles, listWinners, logAudit, normalizeBenefit, publishRaffle, resolveProfileIds, saveBenefit, saveImportRecord, saveProfile, saveRaffle, saveSettings, seedProfilesIfEmpty, updateEmployeeProfiles, winnerKey };
 })();
 
 
@@ -853,7 +869,7 @@ const S = {
   user: null, tab: 'dashboard',
   profiles: [], benefits: [], employees: [], raffles: [], imports: [], audit: [],
   editingBenefit: null, editingProfile: null, editingRaffle: null, viewingRaffle: null,
-  importPreview: null, empSearch: '', benSearch: ''
+  editingEmployee: null, importPreview: null, empSearch: '', benSearch: ''
 };
 
 // Ícones de linha (SVG) — substituem os emojis, dão um ar profissional.
@@ -1047,6 +1063,8 @@ function benefitRows() {
     <td><b>${esc(b.name)}</b><br><span class="muted" style="font-size:12px">${esc(b.category)}</span></td>
     <td>${(b.profileIds || []).length ? (b.profileIds || []).map(pid => esc(profileName(pid))).join(', ') : '<span class="muted">Todos</span>'}</td>
     <td>${b.active !== false ? '<span class="tag on">Ativo</span>' : '<span class="tag off">Inativo</span>'}
+      ${b.featured ? ' <span class="tag published">Destaque</span>' : ''}
+      ${b.isNew ? ' <span class="tag drawn">Novo</span>' : ''}
       ${b.actionRequired ? ' <span class="tag warn">Ação</span>' : ''}</td>
     <td>${b.order || 0}</td>
     <td><div class="row-actions">
@@ -1076,7 +1094,8 @@ function profileName(pid) { return S.profiles.find(p => p.id === pid)?.name || p
 function editBenefit(bid) {
   S.editingBenefit = bid ? { ...S.benefits.find(b => b.id === bid) } : {
     name: '', category: '', description: '', details: '', icon: '🎁', iconFit: 'contain',
-    iconBase64: '', bannerBase64: '', color: 0, active: true, actionRequired: false, responsible: '',
+    iconBase64: '', bannerBase64: '', color: 0, active: true, actionRequired: false,
+    featured: false, isNew: false, responsible: '',
     startDate: '', endDate: '', order: (S.benefits.length + 1), profileIds: [], links: [], documents: []
   };
   render();
@@ -1123,6 +1142,8 @@ function benefitModal() {
           <div class="chips">${S.profiles.map(p =>
             `<span class="chip ${(b.profileIds || []).includes(p.id) ? 'on' : ''}" onclick="window.__benefitProfile('${p.id}')">${esc(p.name)}</span>`).join('')}</div></div>
         <div class="full"><label class="check"><input type="checkbox" id="bf-active" ${b.active !== false ? 'checked' : ''}> Benefício ativo</label></div>
+        <div><label class="check"><input type="checkbox" id="bf-featured" ${b.featured ? 'checked' : ''}> Selo “Destaque”</label></div>
+        <div><label class="check"><input type="checkbox" id="bf-isNew" ${b.isNew ? 'checked' : ''}> Selo “Novo”</label></div>
         <div class="full"><label class="check"><input type="checkbox" id="bf-actionRequired" ${b.actionRequired ? 'checked' : ''}> Selo “Ação necessária”</label></div>
         <div class="full"><label class="lbl">Links e documentos</label>
           <div id="bf-links">${links.map((l, i) => linkRow(l, i)).join('')}</div>
@@ -1180,6 +1201,8 @@ function syncBenefitForm() {
   if (g('bf-startDate')) b.startDate = g('bf-startDate').value;
   if (g('bf-endDate')) b.endDate = g('bf-endDate').value;
   if (g('bf-active')) b.active = g('bf-active').checked;
+  if (g('bf-featured')) b.featured = g('bf-featured').checked;
+  if (g('bf-isNew')) b.isNew = g('bf-isNew').checked;
   if (g('bf-actionRequired')) b.actionRequired = g('bf-actionRequired').checked;
   const fit = document.querySelector('input[name="bf-fit"]:checked');
   if (fit) b.iconFit = fit.value;
@@ -1278,7 +1301,7 @@ function employeeRows() {
   const list = S.employees.filter(e => !q ||
     [e.name, e.cpfMasked, e.unit, e.profileRaw,
      ...(e.profileIds || []).map(profileName)].join(' ').toLowerCase().includes(q));
-  if (!list.length) return '<tr><td colspan="4"><div class="empty">Nenhum funcionário encontrado.</div></td></tr>';
+  if (!list.length) return '<tr><td colspan="5"><div class="empty">Nenhum funcionário encontrado.</div></td></tr>';
   return list.map(e => `<tr>
     <td><b>${esc(e.name || '—')}</b></td>
     <td class="muted">${esc(e.cpfMasked || '—')}</td>
@@ -1286,23 +1309,77 @@ function employeeRows() {
       ? (e.profileIds || []).map(pid => esc(profileName(pid))).join(', ')
       : `<span class="tag warn">Sem perfil</span> <span class="muted" style="font-size:12px">${esc(e.profileRaw || '')}</span>`}</td>
     <td class="muted">${esc(e.unit || '')}</td>
+    <td><div class="row-actions"><button class="btn sm line" onclick="window.__editEmployee('${e.id}')">Editar perfil</button></div></td>
   </tr>`).join('');
 }
 function employeesView() {
   const withoutProfile = S.employees.filter(e => !(e.profileIds || []).length).length;
   const actions = `
+    <button class="btn line" onclick="window.__exportTemplate()">Baixar modelo</button>
     ${S.employees.length ? `<button class="btn line" onclick="window.__exportEmployees()">Exportar Excel</button>` : ''}
     <button class="btn" onclick="window.__importDialog()">Importar planilha</button>`;
   return head('Funcionários', `Base ativa: ${S.employees.length} funcionário(s). A importação substitui toda a base.`,
     `<div style="display:flex;gap:8px;flex-wrap:wrap">${actions}</div>`) +
-    (withoutProfile ? `<div class="hint">⚠️ ${withoutProfile} funcionário(s) sem perfil reconhecido. Eles entram na base, mas só veem benefícios sem restrição de perfil. Confira se o nome do perfil na planilha bate com os cadastrados.</div>` : '') + `
+    (withoutProfile ? `<div class="hint">⚠️ ${withoutProfile} funcionário(s) sem perfil reconhecido. Eles entram na base, mas só veem benefícios sem restrição de perfil. Corrija pelo botão “Editar perfil” ou reimporte a planilha.</div>` : '') + `
     <div class="panel">
       <div class="panel-head"><h2>Base de funcionários</h2>
         ${searchInput('__empSearch', S.empSearch, 'Buscar por nome, CPF, perfil…')}</div>
       <table>
-      <thead><tr><th>Nome</th><th>CPF</th><th>Perfil</th><th>Unidade</th></tr></thead>
-      <tbody id="emp-tbody">${S.employees.length ? employeeRows() : '<tr><td colspan="4"><div class="empty">Base vazia. Importe uma planilha para começar.</div></td></tr>'}</tbody>
-    </table></div>` + (S.importPreview !== null ? importModal() : '');
+      <thead><tr><th>Nome</th><th>CPF</th><th>Perfil</th><th>Unidade</th><th></th></tr></thead>
+      <tbody id="emp-tbody">${S.employees.length ? employeeRows() : '<tr><td colspan="5"><div class="empty">Base vazia. Importe uma planilha para começar.</div></td></tr>'}</tbody>
+    </table></div>`
+    + (S.importPreview !== null ? importModal() : '')
+    + (S.editingEmployee !== null ? employeeModal() : '');
+}
+function editEmployee(eid) {
+  const e = S.employees.find(x => x.id === eid);
+  if (!e) return;
+  S.editingEmployee = { ...e, profileIds: [...(e.profileIds || [])] };
+  render();
+}
+function employeeModal() {
+  const e = S.editingEmployee;
+  return `<div class="modal-bg" onclick="if(event.target===this)window.__closeEmployee()"><div class="modal" style="width:min(520px,100%)">
+    <div class="modal-head"><h2>Perfil do funcionário</h2><button class="x" onclick="window.__closeEmployee()">×</button></div>
+    <div class="modal-body">
+      <p style="margin:0 0 4px"><b>${esc(e.name || '—')}</b></p>
+      <p class="muted" style="margin:0 0 16px;font-size:13px">CPF ${esc(e.cpfMasked || '—')}${e.profileRaw ? ` · planilha trouxe: “${esc(e.profileRaw)}”` : ''}</p>
+      <label class="lbl">Perfis deste funcionário</label>
+      <div class="chips">${S.profiles.map(p =>
+        `<span class="chip ${(e.profileIds || []).includes(p.id) ? 'on' : ''}" onclick="window.__toggleEmpProfile('${p.id}')">${esc(p.name)}</span>`).join('')}</div>
+    </div>
+    <div class="modal-foot"><button class="btn line" onclick="window.__closeEmployee()">Cancelar</button>
+      <button class="btn" onclick="window.__saveEmployee()">Salvar perfil</button></div></div></div>`;
+}
+function toggleEmpProfile(pid) {
+  const arr = S.editingEmployee.profileIds || [];
+  S.editingEmployee.profileIds = arr.includes(pid) ? arr.filter(x => x !== pid) : [...arr, pid];
+  render();
+}
+async function saveEmployee() {
+  const e = S.editingEmployee;
+  await DB.updateEmployeeProfiles(e.id, e.profileIds);
+  await DB.logAudit({ action: 'update', entity: 'employee', entityId: e.id, userEmail: S.user.email, detail: `perfil de ${e.name}` });
+  S.editingEmployee = null;
+  S.employees = await DB.listEmployees();
+  toast('Perfil atualizado.');
+  render();
+}
+// Baixa um modelo de planilha pronto para preencher.
+function exportTemplate() {
+  if (typeof XLSX === 'undefined') { toast('Biblioteca não carregou. Recarregue a página.'); return; }
+  const nomes = S.profiles.map(p => p.name).join(' / ');
+  const rows = [
+    { Nome: 'Maria da Silva', CPF: '123.456.789-00', Perfil: S.profiles[0]?.name || 'Raguife', Unidade: 'Matriz', Departamento: 'Financeiro', Cargo: 'Analista' },
+    { Nome: 'João Souza', CPF: '98765432100', Perfil: S.profiles[1]?.name || 'Comercial', Unidade: 'Filial', Departamento: 'Vendas', Cargo: 'Vendedor' }
+  ];
+  const ws = XLSX.utils.json_to_sheet(rows);
+  // largura das colunas
+  ws['!cols'] = [{ wch: 26 }, { wch: 16 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 16 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Funcionarios');
+  XLSX.writeFile(wb, 'modelo_funcionarios_raguife.xlsx');
+  toast(`Modelo baixado. Perfis válidos: ${nomes}`);
 }
 
 function importDialog() {
@@ -1706,7 +1783,10 @@ Object.assign(window, {
   __setRaffleStatus: setRaffleStatus, __draw: draw, __publish: publish,
   __saveSettings: saveSettings,
   __empSearch: empSearchSet, __benSearch: benSearchSet,
-  __exportEmployees: exportEmployees, __exportWinners: exportWinners
+  __exportEmployees: exportEmployees, __exportWinners: exportWinners,
+  __exportTemplate: exportTemplate,
+  __editEmployee: editEmployee, __closeEmployee: () => { S.editingEmployee = null; render(); },
+  __toggleEmpProfile: toggleEmpProfile, __saveEmployee: saveEmployee
 });
 
 </script>
