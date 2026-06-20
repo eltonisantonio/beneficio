@@ -167,6 +167,17 @@ function escAttr(v) {
   return esc(v).replace(/'/g, '&#39;');
 }
 
+// Formata texto simples: **negrito**, *itálico* (ou _itálico_) e quebras de linha.
+// Escapa o HTML primeiro (seguro), depois aplica a marcação leve.
+function formatText(v) {
+  let s = esc(v);
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>'); // **negrito**
+  s = s.replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<em>$2</em>'); // *itálico*
+  s = s.replace(/(^|[\s(])_([^_\n]+)_/g, '$1<em>$2</em>');   // _itálico_
+  s = s.replace(/\n/g, '<br>');                               // quebras de linha
+  return s;
+}
+
 // --- CPF ---------------------------------------------------------------------
 // digits: extrai só os números. normalizeCpf: 11 dígitos com zeros à esquerda.
 function digits(v) { return String(v ?? '').replace(/\D/g, ''); }
@@ -1002,8 +1013,8 @@ function detailView() {
       ${iconHTML(b)}<span>${esc(b.category)}</span><h2>${esc(b.name)}</h2></section>
     ${b.bannerBase64 ? `<img class="benefit-banner" src="${escAttr(b.bannerBase64)}" alt="">` : ''}
     <section class="box"><div class="lbl">Resumo</div>
-      <p>${esc(b.description || 'Sem descrição cadastrada.')}</p></section>
-    ${b.details ? `<section class="box"><div class="lbl">Regras</div><p>${esc(b.details)}</p></section>` : ''}
+      <p>${formatText(b.description || 'Sem descrição cadastrada.')}</p></section>
+    ${b.details ? `<section class="box"><div class="lbl">Regras</div><p>${formatText(b.details)}</p></section>` : ''}
     ${b.responsible ? `<section class="box"><div class="lbl">Dúvidas com</div><p>${esc(b.responsible)}</p></section>` : ''}
     ${links.length ? `<section class="box"><div class="lbl">Links e documentos</div>
       ${links.map(l => `<a class="link" href="${escAttr(l.url)}" target="_blank" rel="noopener">

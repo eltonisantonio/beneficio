@@ -280,6 +280,17 @@ function escAttr(v) {
   return esc(v).replace(/'/g, '&#39;');
 }
 
+// Formata texto simples: **negrito**, *itálico* (ou _itálico_) e quebras de linha.
+// Escapa o HTML primeiro (seguro), depois aplica a marcação leve.
+function formatText(v) {
+  let s = esc(v);
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>'); // **negrito**
+  s = s.replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<em>$2</em>'); // *itálico*
+  s = s.replace(/(^|[\s(])_([^_\n]+)_/g, '$1<em>$2</em>');   // _itálico_
+  s = s.replace(/\n/g, '<br>');                               // quebras de linha
+  return s;
+}
+
 // --- CPF ---------------------------------------------------------------------
 // digits: extrai só os números. normalizeCpf: 11 dígitos com zeros à esquerda.
 function digits(v) { return String(v ?? '').replace(/\D/g, ''); }
@@ -1114,7 +1125,8 @@ function benefitModal() {
         <div><label class="lbl">Categoria</label><input class="field" id="bf-category" value="${escAttr(b.category)}" placeholder="Saúde, Convênio…"></div>
         <div><label class="lbl">Ordem de exibição</label><input class="field" id="bf-order" type="number" value="${Number(b.order || 0)}"></div>
         <div class="full"><label class="lbl">Descrição (resumo no card)</label><textarea class="field" id="bf-description">${esc(b.description)}</textarea></div>
-        <div class="full"><label class="lbl">Regras detalhadas (opcional)</label><textarea class="field" id="bf-details">${esc(b.details)}</textarea></div>
+        <div class="full"><label class="lbl">Regras detalhadas (opcional)</label><textarea class="field" id="bf-details">${esc(b.details)}</textarea>
+          <p class="muted" style="font-size:12px;margin:6px 0 0">Dá pra usar <b>**negrito**</b>, <i>*itálico*</i> e quebrar linhas com Enter para separar parágrafos.</p></div>
         <div><label class="lbl">Responsável interno (opcional)</label><input class="field" id="bf-responsible" value="${escAttr(b.responsible)}"></div>
         <div><label class="lbl">Emoji do ícone (se não usar imagem)</label><input class="field" id="bf-icon" value="${escAttr(b.icon)}" maxlength="4"></div>
         <div><label class="lbl">Início (opcional)</label><input class="field" id="bf-startDate" type="date" value="${escAttr(b.startDate)}"></div>
@@ -1165,7 +1177,7 @@ function linkRow(l, i) {
 }
 
 // Mutações no benefício em edição
-function benefitColor(i) { S.editingBenefit.color = i; render(); }
+function benefitColor(i) { syncBenefitForm(); S.editingBenefit.color = i; render(); }
 function benefitProfile(pid) {
   const arr = S.editingBenefit.profileIds || [];
   S.editingBenefit.profileIds = arr.includes(pid) ? arr.filter(x => x !== pid) : [...arr, pid];
