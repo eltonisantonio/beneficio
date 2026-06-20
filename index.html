@@ -547,20 +547,27 @@ async function getRaffle(raffleId) {
 }
 
 // ----------------------------------------------------------------------------
-// RAFFLE ENTRIES (inscrições). ID = `${raffleId}_${cpfHash}` → trava 1 por sorteio
+// RAFFLE ENTRIES (inscrições). ID = `${raffleId}_${cpfHash}_${filmId}`
+// → permite inscrição em vários filmes; trava 1 inscrição por filme.
 // ----------------------------------------------------------------------------
-function entryId(raffleId, h) { return `${raffleId}_${h}`; }
+function entryKey(raffleId, h, filmId) { return `${raffleId}_${h}_${filmId}`; }
+function winnerKey(raffleId, h) { return `${raffleId}_${h}`; } // 1 prêmio por pessoa
 
-// Funcionário consulta a PRÓPRIA inscrição (getDoc por id).
-async function getMyEntry(raffleId, h) {
-  const snap = await getDoc(ref('raffle_entries', entryId(raffleId, h))).catch(() => null);
-  return snap && snap.exists() ? { id: snap.id, ...snap.data() } : null;
+// Funcionário consulta as PRÓPRIAS inscrições (getDoc por id, um por filme).
+async function getMyEntries(raffle, h) {
+  const films = (raffle.films || []);
+  const results = await Promise.all(films.map(f =>
+    getDoc(ref('raffle_entries', entryKey(raffle.id, h, f.id)))
+      .then(s => (s.exists() ? { id: s.id, ...s.data() } : null))
+      .catch(() => null)
+  ));
+  return results.filter(Boolean);
 }
-// Funcionário cria a inscrição. As regras do Firestore só permitem CREATE
-// (não UPDATE), então uma segunda tentativa no mesmo sorteio é barrada.
+// Funcionário cria a inscrição em UM filme. As regras só permitem CREATE
+// (não UPDATE), então re-inscrever no mesmo filme é barrado.
 async function createEntry(raffle, film, employee) {
   const h = employee.id; // já é o hash
-  await setDoc(ref('raffle_entries', entryId(raffle.id, h)), {
+  await setDoc(ref('raffle_entries', entryKey(raffle.id, h, film.id)), {
     raffleId: raffle.id,
     filmId: film.id,
     filmTitle: film.title,
@@ -582,7 +589,7 @@ async function listEntries(raffleId) {
 // ----------------------------------------------------------------------------
 // Funcionário consulta o PRÓPRIO resultado (getDoc por id).
 async function getMyWinner(raffleId, h) {
-  const snap = await getDoc(ref('raffle_winners', entryId(raffleId, h))).catch(() => null);
+  const snap = await getDoc(ref('raffle_winners', winnerKey(raffleId, h))).catch(() => null);
   return snap && snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 async function listWinners(raffleId) {
@@ -652,7 +659,7 @@ async function drawRaffle(raffleId) {
   for (let i = 0; i < winners.length; i += 200) {
     const batch = writeBatch(db);
     for (const w of winners.slice(i, i + 200)) {
-      batch.set(ref('raffle_winners', entryId(raffleId, w.cpfHash)), w);
+      batch.set(ref('raffle_winners', winnerKey(raffleId, w.cpfHash)), w);
       batch.update(ref('employees', w.cpfHash), {
         wonFilms: arrayUnionTitle(w.filmTitle)
       });
@@ -712,7 +719,7 @@ const HKEY = 'rgf_h'; // chave do hash no localStorage
 // --- Estado da aplicação -----------------------------------------------------
 const S = {
   settings: null, profiles: [], benefits: [],
-  employee: null, raffle: null, myEntry: null, myWinner: null,
+  employee: null, raffle: null, myEntries: [], myWinner: null,
   screen: 'home', openBenefitId: null, search: '', category: ''
 };
 
@@ -741,10 +748,10 @@ async function afterLogin() {
   S.benefits = await listBenefits();
   S.raffle = await getCurrentRaffle();
   if (S.raffle) {
-    S.myEntry = await getMyEntry(S.raffle.id, S.employee.id);
+    S.myEntries = await getMyEntries(S.raffle, S.employee.id);
     S.myWinner = await getMyWinner(S.raffle.id, S.employee.id);
   } else {
-    S.myEntry = null; S.myWinner = null;
+    S.myEntries = []; S.myWinner = null;
   }
 }
 
@@ -775,7 +782,7 @@ async function login() {
 
 function logout() {
   localStorage.removeItem(HKEY);
-  S.employee = null; S.raffle = null; S.myEntry = null; S.myWinner = null;
+  S.employee = null; S.raffle = null; S.myEntries = []; S.myWinner = null;
   S.screen = 'home'; S.openBenefitId = null; S.search = ''; S.category = '';
   render();
 }
@@ -786,18 +793,20 @@ function openBenefit(bid) { S.openBenefitId = bid; S.screen = 'detail'; render()
 function goHome() { S.screen = 'home'; S.openBenefitId = null; render(); window.scrollTo(0, 0); }
 
 async function joinRaffle() {
-  const filmId = document.querySelector('input[name="film"]:checked')?.value;
-  if (!S.raffle || !filmId) return;
-  const film = S.raffle.films.find(f => f.id === filmId);
-  // Trava de UX: já ganhou esse título antes?
-  const alreadyWon = (S.employee.wonFilms || [])
-    .map(t => String(t).trim().toLowerCase())
-    .includes(String(film?.title || '').trim().toLowerCase());
-  if (alreadyWon) { toast('Você já foi contemplado neste filme antes.'); return; }
+  if (!S.raffle) return;
+  const checked = [...document.querySelectorAll('input[name="film"]:checked')].map(el => el.value);
+  if (!checked.length) { toast('Marque ao menos um filme.'); return; }
+  const enteredIds = new Set(S.myEntries.map(e => e.filmId));
+  const wonSet = new Set((S.employee.wonFilms || []).map(t => String(t).trim().toLowerCase()));
+  const toEnter = checked
+    .filter(id => !enteredIds.has(id))
+    .map(id => S.raffle.films.find(f => f.id === id))
+    .filter(f => f && !wonSet.has(String(f.title).trim().toLowerCase()));
+  if (!toEnter.length) { toast('Você já está inscrito nesses filmes.'); return; }
   try {
-    await createEntry(S.raffle, film, S.employee);
-    S.myEntry = await getMyEntry(S.raffle.id, S.employee.id);
-    toast('Participação registrada!');
+    for (const film of toEnter) await createEntry(S.raffle, film, S.employee);
+    S.myEntries = await getMyEntries(S.raffle, S.employee.id);
+    toast(toEnter.length > 1 ? `Inscrição registrada em ${toEnter.length} filmes!` : 'Inscrição registrada!');
     render();
   } catch (e) {
     toast('Não foi possível registrar. Tente novamente.');
@@ -1029,33 +1038,43 @@ function raffleCard() {
       <div class="result">Dessa vez você não foi contemplado. Boa sorte na próxima!</div></section>`;
   }
 
-  // Já inscrito
-  if (S.myEntry) {
-    const f = r.films.find(x => x.id === S.myEntry.filmId);
-    return `<section class="raffle"><h2>${title}</h2>
-      <p>Inscrição registrada${f ? ` para <b>${esc(f.title)}</b>` : ''}. Aguarde o resultado.</p>
-      <div class="result win">✅ Confirmado em ${esc(dt(S.myEntry.createdAt))}</div></section>`;
-  }
+  const enteredIds = new Set(S.myEntries.map(e => e.filmId));
+  const enteredTitles = S.myEntries.map(e => e.filmTitle).filter(Boolean);
 
-  // Inscrições fechadas
+  // Inscrições fechadas / sorteado (ainda não publicado)
   if (!raffleOpen(r)) {
+    if (enteredIds.size) {
+      return `<section class="raffle"><h2>${title}</h2>
+        <p>Inscrições encerradas. Você está concorrendo — aguarde o resultado.</p>
+        <div class="result win">✅ Inscrito em: ${esc(enteredTitles.join(', '))}</div></section>`;
+    }
     return `<section class="raffle"><h2>${title}</h2>
       <p>As inscrições não estão abertas neste momento.</p>
       <div class="result">Período: ${r.startAt ? esc(dt(r.startAt)) : 'a definir'} até ${r.endAt ? esc(dt(r.endAt)) : 'a definir'}</div></section>`;
   }
 
-  // Inscrições abertas — escolher filme
+  // Inscrições abertas — marcar um ou vários filmes
   const films = (r.films || []).filter(f => f.active !== false);
   const wonSet = new Set((S.employee.wonFilms || []).map(t => String(t).trim().toLowerCase()));
+  const canPick = films.filter(f => !enteredIds.has(f.id) && !wonSet.has(String(f.title).trim().toLowerCase()));
+  const intro = enteredIds.size
+    ? 'Você já está inscrito nos filmes marcados. Pode marcar mais e confirmar.'
+    : 'Marque um ou mais filmes e confirme. Você concorre em todos, mas leva no máximo um prêmio.';
   return `<section class="raffle"><h2>${title}</h2>
-    <p>Escolha o filme e confirme. Só concorre quem se inscrever.</p>
-    ${films.map((f, i) => {
-      const blocked = wonSet.has(String(f.title).trim().toLowerCase());
-      return `<label class="film" ${blocked ? 'style="opacity:.5"' : ''}>
-        <input type="radio" name="film" value="${escAttr(f.id)}" ${i === 0 && !blocked ? 'checked' : ''} ${blocked ? 'disabled' : ''}>
-        <div><b>${esc(f.title)}</b><span>${blocked ? 'Você já ganhou este filme' : `${Number(f.quantity || 0)} ingresso(s)`}</span></div></label>`;
+    <p>${intro}</p>
+    ${films.map(f => {
+      const entered = enteredIds.has(f.id);
+      const won = wonSet.has(String(f.title).trim().toLowerCase());
+      const disabled = entered || won;
+      const note = won ? 'Você já ganhou este filme' : entered ? 'Inscrito ✓' : `${Number(f.quantity || 0)} ingresso(s)`;
+      return `<label class="film" ${won ? 'style="opacity:.5"' : ''}>
+        <input type="checkbox" name="film" value="${escAttr(f.id)}" ${entered ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+        <div><b>${esc(f.title)}</b><span>${note}</span></div></label>`;
     }).join('')}
-    <button class="btn" onclick="window.__joinRaffle()">Quero participar</button></section>`;
+    ${canPick.length
+      ? `<button class="btn" onclick="window.__joinRaffle()">${enteredIds.size ? 'Confirmar inscrições' : 'Quero participar'}</button>`
+      : '<div class="result win">✅ Você está inscrito em todos os filmes disponíveis.</div>'}
+  </section>`;
 }
 
 function errorView(e) {

@@ -676,20 +676,27 @@ async function getRaffle(raffleId) {
 }
 
 // ----------------------------------------------------------------------------
-// RAFFLE ENTRIES (inscrições). ID = `${raffleId}_${cpfHash}` → trava 1 por sorteio
+// RAFFLE ENTRIES (inscrições). ID = `${raffleId}_${cpfHash}_${filmId}`
+// → permite inscrição em vários filmes; trava 1 inscrição por filme.
 // ----------------------------------------------------------------------------
-function entryId(raffleId, h) { return `${raffleId}_${h}`; }
+function entryKey(raffleId, h, filmId) { return `${raffleId}_${h}_${filmId}`; }
+function winnerKey(raffleId, h) { return `${raffleId}_${h}`; } // 1 prêmio por pessoa
 
-// Funcionário consulta a PRÓPRIA inscrição (getDoc por id).
-async function getMyEntry(raffleId, h) {
-  const snap = await getDoc(ref('raffle_entries', entryId(raffleId, h))).catch(() => null);
-  return snap && snap.exists() ? { id: snap.id, ...snap.data() } : null;
+// Funcionário consulta as PRÓPRIAS inscrições (getDoc por id, um por filme).
+async function getMyEntries(raffle, h) {
+  const films = (raffle.films || []);
+  const results = await Promise.all(films.map(f =>
+    getDoc(ref('raffle_entries', entryKey(raffle.id, h, f.id)))
+      .then(s => (s.exists() ? { id: s.id, ...s.data() } : null))
+      .catch(() => null)
+  ));
+  return results.filter(Boolean);
 }
-// Funcionário cria a inscrição. As regras do Firestore só permitem CREATE
-// (não UPDATE), então uma segunda tentativa no mesmo sorteio é barrada.
+// Funcionário cria a inscrição em UM filme. As regras só permitem CREATE
+// (não UPDATE), então re-inscrever no mesmo filme é barrado.
 async function createEntry(raffle, film, employee) {
   const h = employee.id; // já é o hash
-  await setDoc(ref('raffle_entries', entryId(raffle.id, h)), {
+  await setDoc(ref('raffle_entries', entryKey(raffle.id, h, film.id)), {
     raffleId: raffle.id,
     filmId: film.id,
     filmTitle: film.title,
@@ -711,7 +718,7 @@ async function listEntries(raffleId) {
 // ----------------------------------------------------------------------------
 // Funcionário consulta o PRÓPRIO resultado (getDoc por id).
 async function getMyWinner(raffleId, h) {
-  const snap = await getDoc(ref('raffle_winners', entryId(raffleId, h))).catch(() => null);
+  const snap = await getDoc(ref('raffle_winners', winnerKey(raffleId, h))).catch(() => null);
   return snap && snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 async function listWinners(raffleId) {
@@ -781,7 +788,7 @@ async function drawRaffle(raffleId) {
   for (let i = 0; i < winners.length; i += 200) {
     const batch = writeBatch(db);
     for (const w of winners.slice(i, i + 200)) {
-      batch.set(ref('raffle_winners', entryId(raffleId, w.cpfHash)), w);
+      batch.set(ref('raffle_winners', winnerKey(raffleId, w.cpfHash)), w);
       batch.update(ref('employees', w.cpfHash), {
         wonFilms: arrayUnionTitle(w.filmTitle)
       });
@@ -824,7 +831,7 @@ async function listAudit(limitN = 100) {
   return out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, limitN);
 }
 
-return { DEFAULT_PROFILES, DEFAULT_SETTINGS, arrayUnionTitle, createEntry, deleteBenefit, deleteProfile, deleteRaffle, drawRaffle, entryId, getCurrentRaffle, getEmployeeByCpf, getEmployeeByHash, getMyEntry, getMyWinner, getRaffle, getSettings, importEmployees, listAllWinners, listAudit, listBenefits, listEmployees, listEntries, listImports, listProfiles, listRaffles, listWinners, logAudit, normalizeBenefit, publishRaffle, resolveProfileIds, saveBenefit, saveImportRecord, saveProfile, saveRaffle, saveSettings, seedProfilesIfEmpty };
+return { DEFAULT_PROFILES, DEFAULT_SETTINGS, arrayUnionTitle, createEntry, deleteBenefit, deleteProfile, deleteRaffle, drawRaffle, entryKey, getCurrentRaffle, getEmployeeByCpf, getEmployeeByHash, getMyEntries, getMyWinner, getRaffle, getSettings, importEmployees, listAllWinners, listAudit, listBenefits, listEmployees, listEntries, listImports, listProfiles, listRaffles, listWinners, logAudit, normalizeBenefit, publishRaffle, resolveProfileIds, saveBenefit, saveImportRecord, saveProfile, saveRaffle, saveSettings, seedProfilesIfEmpty, winnerKey };
 })();
 
 
@@ -1531,19 +1538,21 @@ function raffleDetailView() {
     ${canPublish ? `<button class="btn" onclick="window.__publish('${r.id}')">📣 Publicar resultado</button>` : ''}
     ${winners.length ? `<button class="btn line" onclick="window.__exportWinners('${r.id}')">Exportar ganhadores</button>` : ''}`;
 
+  const uniquePeople = new Set(entries.map(e => e.cpfHash)).size;
+
   return `<div class="rh-head"><div><h1>${esc(r.title)}</h1>
-    <p>${statusLabel(r.status) || ''} · ${entries.length} inscrito(s)</p></div>
+    <p>${statusLabel(r.status) || ''} · ${uniquePeople} pessoa(s) inscrita(s)</p></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">${actions}</div></div>
     ${statusTag(r.status)}
     <div class="cards-grid" style="margin-top:16px">
-      <div class="kpi"><b>${entries.length}</b><span>inscritos</span></div>
-      <div class="kpi"><b>${r.films.length}</b><span>filmes</span></div>
+      <div class="kpi"><b>${uniquePeople}</b><span>pessoas inscritas</span></div>
+      <div class="kpi"><b>${entries.length}</b><span>inscrições (todos os filmes)</span></div>
       <div class="kpi"><b>${r.films.reduce((s, f) => s + Number(f.quantity || 0), 0)}</b><span>ingressos</span></div>
       <div class="kpi"><b>${winners.length}</b><span>ganhadores</span></div>
     </div>
     ${byFilm.map(x => `<div class="panel"><div class="panel-head">
       <h2>${esc(x.film.title)}</h2>
-      <span class="muted">${x.count} inscrito(s) · ${x.film.quantity} ingresso(s)</span></div>
+      <span class="muted">${x.count} inscrição(ões) · ${x.film.quantity} ingresso(s)</span></div>
       <div class="panel-body">
         ${x.winners.length ? `<table><thead><tr><th>Ganhador</th><th>Voucher</th></tr></thead><tbody>
           ${x.winners.map(w => `<tr><td>${esc(w.employeeName || '—')}</td><td><code>${esc(w.voucherCode)}</code></td></tr>`).join('')}
