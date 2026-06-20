@@ -2,6 +2,7 @@
 <html lang="pt-BR"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Raguife · Benefícios</title><meta name="theme-color" content="#024f2b">
+<link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Benefícios">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 /* ===========================================================================
@@ -83,6 +84,13 @@ body{font-family:var(--body);color:var(--ink);-webkit-font-smoothing:antialiased
 
 /* Banner (imagem do Canva) no detalhe do benefício */
 .benefit-banner{display:block;width:100%;height:auto;border-radius:14px;margin:0 0 14px;border:1px solid var(--line)}
+
+/* === Filtro de categorias (funcionário) === */
+.catbar{display:flex;gap:8px;overflow-x:auto;padding:2px 0 4px;margin:0 0 12px;-webkit-overflow-scrolling:touch}
+.catbar::-webkit-scrollbar{height:0}
+.catchip{flex:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;
+  padding:7px 14px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+.catchip.on{background:var(--primary);color:#fff;border-color:var(--primary)}
 
 </style></head><body>
 <div id="root"><main class="login"><section class="login-card"><h1>Carregando…</h1></section></main></div>
@@ -705,7 +713,7 @@ const HKEY = 'rgf_h'; // chave do hash no localStorage
 const S = {
   settings: null, profiles: [], benefits: [],
   employee: null, raffle: null, myEntry: null, myWinner: null,
-  screen: 'home', openBenefitId: null, search: ''
+  screen: 'home', openBenefitId: null, search: '', category: ''
 };
 
 const root = () => document.getElementById('root');
@@ -768,11 +776,12 @@ async function login() {
 function logout() {
   localStorage.removeItem(HKEY);
   S.employee = null; S.raffle = null; S.myEntry = null; S.myWinner = null;
-  S.screen = 'home'; S.openBenefitId = null; S.search = '';
+  S.screen = 'home'; S.openBenefitId = null; S.search = ''; S.category = '';
   render();
 }
 
-function setSearch(v) { S.search = v; renderHomeBody(); }
+function setSearch(v) { S.search = v; renderCards(); }
+function setCategory(c) { S.category = c; renderCatbar(); renderCards(); }
 function openBenefit(bid) { S.openBenefitId = bid; S.screen = 'detail'; render(); window.scrollTo(0, 0); }
 function goHome() { S.screen = 'home'; S.openBenefitId = null; render(); window.scrollTo(0, 0); }
 
@@ -810,10 +819,16 @@ function benefitVisible(b) {
 function myBenefits() {
   return S.benefits.filter(benefitVisible);
 }
+function categories() {
+  return [...new Set(myBenefits().map(b => b.category).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+}
 function filteredBenefits() {
   const q = S.search.toLowerCase().trim();
-  return myBenefits().filter(b => !q ||
-    [b.name, b.category, b.description, b.responsible].join(' ').toLowerCase().includes(q));
+  const cat = S.category;
+  return myBenefits().filter(b =>
+    (!cat || b.category === cat) &&
+    (!q || [b.name, b.category, b.description, b.responsible].join(' ').toLowerCase().includes(q)));
 }
 
 // --- Render ------------------------------------------------------------------
@@ -829,6 +844,27 @@ function render() {
 function renderHomeBody() {
   const el = document.querySelector('.body');
   if (el && S.screen === 'home') el.innerHTML = homeBody();
+}
+function cardsHTML() {
+  const benefits = filteredBenefits();
+  return benefits.length
+    ? benefits.map(benefitCard).join('')
+    : '<div class="empty">Nenhum benefício encontrado para este filtro.</div>';
+}
+function catbarHTML() {
+  const cats = categories();
+  if (cats.length < 2) return '';
+  const chip = (val, label) =>
+    `<button class="catchip ${S.category === val ? 'on' : ''}" onclick="window.__setCategory('${escAttr(val)}')">${esc(label)}</button>`;
+  return chip('', 'Todos') + cats.map(c => chip(c, c)).join('');
+}
+function renderCards() {
+  const el = document.getElementById('cards');
+  if (el) el.innerHTML = cardsHTML();
+}
+function renderCatbar() {
+  const el = document.getElementById('catbar');
+  if (el) el.innerHTML = catbarHTML();
 }
 
 function iconHTML(b, cls = 'ico') {
@@ -877,7 +913,6 @@ function shell(content) {
 
 function homeView() { return homeBody(); }
 function homeBody() {
-  const benefits = filteredBenefits();
   const total = myBenefits().length;
   return `${raffleCard()}
     <button class="idcta" onclick="window.__openCard()">
@@ -893,9 +928,8 @@ function homeBody() {
     <div class="search"><span>🔎</span>
       <input class="field" value="${escAttr(S.search)}" placeholder="Buscar benefício"
         oninput="window.__setSearch(this.value)"></div>
-    <div class="cards">${benefits.length
-      ? benefits.map(benefitCard).join('')
-      : '<div class="empty">Nenhum benefício disponível para o seu perfil neste momento.</div>'}</div>
+    <div class="catbar" id="catbar">${catbarHTML()}</div>
+    <div class="cards" id="cards">${cardsHTML()}</div>
     <div class="privacy">${esc(S.settings.privacyText)}</div>`;
 }
 
@@ -1037,6 +1071,7 @@ function errorView(e) {
 window.__login = login;
 window.__logout = logout;
 window.__setSearch = setSearch;
+window.__setCategory = setCategory;
 window.__openBenefit = openBenefit;
 window.__openCard = openCard;
 window.__goHome = goHome;
@@ -1045,4 +1080,5 @@ window.__joinRaffle = joinRaffle;
 init();
 
 </script>
+<script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("./service-worker.js").catch(function(){})})}</script>
 </body></html>

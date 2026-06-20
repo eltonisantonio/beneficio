@@ -846,7 +846,7 @@ const S = {
   user: null, tab: 'dashboard',
   profiles: [], benefits: [], employees: [], raffles: [], imports: [], audit: [],
   editingBenefit: null, editingProfile: null, editingRaffle: null, viewingRaffle: null,
-  importPreview: null
+  importPreview: null, empSearch: '', benSearch: ''
 };
 
 // Ícones de linha (SVG) — substituem os emojis, dão um ar profissional.
@@ -995,6 +995,10 @@ function head(title, sub, actionHTML = '') {
     <div class="eyebrow">${esc(eyebrow)}</div>
     <h1>${esc(title)}</h1><p>${esc(sub)}</p></div>${actionHTML}</div>`;
 }
+function searchInput(handler, value, placeholder) {
+  return `<input class="field" style="max-width:280px;padding:8px 12px" value="${escAttr(value || '')}"
+    placeholder="${escAttr(placeholder)}" oninput="window.${handler}(this.value)">`;
+}
 
 // ============================================================================
 // PAINEL
@@ -1026,8 +1030,12 @@ function dashboardView() {
 // ============================================================================
 // BENEFÍCIOS
 // ============================================================================
-function benefitsView() {
-  const rows = S.benefits.map(b => `<tr>
+function benefitRows() {
+  const q = (S.benSearch || '').toLowerCase().trim();
+  const list = S.benefits.filter(b => !q ||
+    [b.name, b.category, b.responsible].join(' ').toLowerCase().includes(q));
+  if (!list.length) return '<tr><td colspan="6"><div class="empty">Nenhum benefício encontrado.</div></td></tr>';
+  return list.map(b => `<tr>
     <td>${iconBox(b)}</td>
     <td><b>${esc(b.name)}</b><br><span class="muted" style="font-size:12px">${esc(b.category)}</span></td>
     <td>${(b.profileIds || []).length ? (b.profileIds || []).map(pid => esc(profileName(pid))).join(', ') : '<span class="muted">Todos</span>'}</td>
@@ -1038,11 +1046,16 @@ function benefitsView() {
       <button class="btn sm line" onclick="window.__editBenefit('${b.id}')">Editar</button>
       <button class="btn sm danger" onclick="window.__delBenefit('${b.id}')">Excluir</button></div></td>
   </tr>`).join('');
+}
+function benefitsView() {
   return head('Benefícios', 'Cadastre, ative/inative e ordene os benefícios.',
     `<button class="btn" onclick="window.__editBenefit('')">+ Novo benefício</button>`) + `
-    <div class="panel"><table>
+    <div class="panel">
+      <div class="panel-head"><h2>Todos os benefícios</h2>
+        ${searchInput('__benSearch', S.benSearch, 'Buscar benefício')}</div>
+      <table>
       <thead><tr><th>Ícone</th><th>Nome</th><th>Perfis</th><th>Status</th><th>Ordem</th><th></th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="6"><div class="empty">Nenhum benefício ainda. Clique em “Novo benefício”.</div></td></tr>'}</tbody>
+      <tbody id="ben-tbody">${benefitRows()}</tbody>
     </table></div>` + (S.editingBenefit !== null ? benefitModal() : '');
 }
 function iconBox(b) {
@@ -1253,8 +1266,13 @@ async function delProfile(pid) {
 // ============================================================================
 // FUNCIONÁRIOS + IMPORTAÇÃO
 // ============================================================================
-function employeesView() {
-  const rows = S.employees.map(e => `<tr>
+function employeeRows() {
+  const q = (S.empSearch || '').toLowerCase().trim();
+  const list = S.employees.filter(e => !q ||
+    [e.name, e.cpfMasked, e.unit, e.profileRaw,
+     ...(e.profileIds || []).map(profileName)].join(' ').toLowerCase().includes(q));
+  if (!list.length) return '<tr><td colspan="4"><div class="empty">Nenhum funcionário encontrado.</div></td></tr>';
+  return list.map(e => `<tr>
     <td><b>${esc(e.name || '—')}</b></td>
     <td class="muted">${esc(e.cpfMasked || '—')}</td>
     <td>${(e.profileIds || []).length
@@ -1262,13 +1280,21 @@ function employeesView() {
       : `<span class="tag warn">Sem perfil</span> <span class="muted" style="font-size:12px">${esc(e.profileRaw || '')}</span>`}</td>
     <td class="muted">${esc(e.unit || '')}</td>
   </tr>`).join('');
+}
+function employeesView() {
   const withoutProfile = S.employees.filter(e => !(e.profileIds || []).length).length;
+  const actions = `
+    ${S.employees.length ? `<button class="btn line" onclick="window.__exportEmployees()">Exportar Excel</button>` : ''}
+    <button class="btn" onclick="window.__importDialog()">Importar planilha</button>`;
   return head('Funcionários', `Base ativa: ${S.employees.length} funcionário(s). A importação substitui toda a base.`,
-    `<button class="btn" onclick="window.__importDialog()">📥 Importar planilha</button>`) +
+    `<div style="display:flex;gap:8px;flex-wrap:wrap">${actions}</div>`) +
     (withoutProfile ? `<div class="hint">⚠️ ${withoutProfile} funcionário(s) sem perfil reconhecido. Eles entram na base, mas só veem benefícios sem restrição de perfil. Confira se o nome do perfil na planilha bate com os cadastrados.</div>` : '') + `
-    <div class="panel"><table>
+    <div class="panel">
+      <div class="panel-head"><h2>Base de funcionários</h2>
+        ${searchInput('__empSearch', S.empSearch, 'Buscar por nome, CPF, perfil…')}</div>
+      <table>
       <thead><tr><th>Nome</th><th>CPF</th><th>Perfil</th><th>Unidade</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="4"><div class="empty">Base vazia. Importe uma planilha para começar.</div></td></tr>'}</tbody>
+      <tbody id="emp-tbody">${S.employees.length ? employeeRows() : '<tr><td colspan="4"><div class="empty">Base vazia. Importe uma planilha para começar.</div></td></tr>'}</tbody>
     </table></div>` + (S.importPreview !== null ? importModal() : '');
 }
 
@@ -1502,7 +1528,8 @@ function raffleDetailView() {
     ${r.status === 'open' ? `<button class="btn line" onclick="window.__setRaffleStatus('${r.id}','closed')">🔒 Fechar inscrições</button>` : ''}
     ${r.status === 'closed' ? `<button class="btn line" onclick="window.__setRaffleStatus('${r.id}','open')">🔓 Reabrir inscrições</button>` : ''}
     ${canDraw ? `<button class="btn" onclick="window.__draw('${r.id}')">🎲 Realizar sorteio</button>` : ''}
-    ${canPublish ? `<button class="btn" onclick="window.__publish('${r.id}')">📣 Publicar resultado</button>` : ''}`;
+    ${canPublish ? `<button class="btn" onclick="window.__publish('${r.id}')">📣 Publicar resultado</button>` : ''}
+    ${winners.length ? `<button class="btn line" onclick="window.__exportWinners('${r.id}')">Exportar ganhadores</button>` : ''}`;
 
   return `<div class="rh-head"><div><h1>${esc(r.title)}</h1>
     <p>${statusLabel(r.status) || ''} · ${entries.length} inscrito(s)</p></div>
@@ -1604,6 +1631,55 @@ async function postRender() {
 }
 
 // --- Handlers globais (onclick inline) --------------------------------------
+// ============================================================================
+// Busca nas listas (atualiza só o corpo da tabela, sem perder o foco)
+// ============================================================================
+function empSearchSet(v) {
+  S.empSearch = v;
+  const el = document.getElementById('emp-tbody');
+  if (el) el.innerHTML = employeeRows();
+}
+function benSearchSet(v) {
+  S.benSearch = v;
+  const el = document.getElementById('ben-tbody');
+  if (el) el.innerHTML = benefitRows();
+}
+
+// ============================================================================
+// Exportação para Excel (usa o SheetJS já carregado na página)
+// ============================================================================
+function downloadSheet(rows, sheetName, fileName) {
+  if (typeof XLSX === 'undefined') { toast('Biblioteca de exportação não carregou. Recarregue a página.'); return; }
+  if (!rows.length) { toast('Nada para exportar.'); return; }
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, fileName);
+}
+function exportEmployees() {
+  const rows = S.employees.map(e => ({
+    Nome: e.name || '',
+    CPF: e.cpfMasked || '',
+    Perfil: (e.profileIds || []).map(profileName).join(', ') || e.profileRaw || '',
+    Unidade: e.unit || '',
+    Departamento: e.department || '',
+    Cargo: e.role || ''
+  }));
+  downloadSheet(rows, 'Funcionários', 'funcionarios_raguife.xlsx');
+  DB.logAudit({ action: 'export', entity: 'employees', userEmail: S.user.email, detail: `${rows.length} registros` });
+}
+function exportWinners(rid) {
+  const r = S.viewingRaffle;
+  const winners = (r && r._winners) || [];
+  const rows = winners.map(w => ({
+    Filme: w.filmTitle || '',
+    Ganhador: w.employeeName || '',
+    Voucher: w.voucherCode || ''
+  }));
+  downloadSheet(rows, 'Ganhadores', `ganhadores_${(r?.title || 'sorteio').replace(/\s+/g, '_').toLowerCase()}.xlsx`);
+  DB.logAudit({ action: 'export', entity: 'raffle_winners', entityId: rid, userEmail: S.user.email, detail: `${rows.length} ganhadores` });
+}
+
 Object.assign(window, {
   __login: doLogin, __logout: doLogout, __tab: goTab,
   __editBenefit: editBenefit, __closeBenefit: () => { S.editingBenefit = null; render(); },
@@ -1619,7 +1695,9 @@ Object.assign(window, {
   __saveRaffle: saveRaffle, __delRaffle: delRaffle, __addFilm: addFilm,
   __viewRaffle: viewRaffle, __backRaffles: () => { S.viewingRaffle = null; render(); },
   __setRaffleStatus: setRaffleStatus, __draw: draw, __publish: publish,
-  __saveSettings: saveSettings
+  __saveSettings: saveSettings,
+  __empSearch: empSearchSet, __benSearch: benSearchSet,
+  __exportEmployees: exportEmployees, __exportWinners: exportWinners
 });
 
 </script>
