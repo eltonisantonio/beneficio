@@ -1,5 +1,5 @@
 // PWA do Portal Raguife (versão tudo-em-um). Suba CACHE a cada publicação.
-const CACHE = 'raguife-v4';
+const CACHE = 'raguife-v6';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

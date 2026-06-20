@@ -403,7 +403,9 @@ const DEFAULT_SETTINGS = {
   privacyText: 'Utilizamos seu CPF apenas para identificar seu cadastro e exibir os ' +
     'benefícios disponíveis conforme seu perfil. Seus dados não serão exibidos ' +
     'publicamente. Em caso de dúvidas, procure o RH/DP.',
-  theme: 'green'
+  theme: 'green',
+  cardEnabled: true,      // mostrar a carteirinha do cinema
+  cardProfileIds: []      // perfis que veem a carteirinha (vazio = todos)
 };
 
 async function getSettings() {
@@ -1103,7 +1105,7 @@ function editBenefit(bid) {
 function benefitModal() {
   const b = S.editingBenefit;
   const links = [...(b.links || []), ...(b.documents || [])];
-  return `<div class="modal-bg" onclick="if(event.target===this)window.__closeBenefit()"><div class="modal">
+  return `<div class="modal-bg"><div class="modal">
     <div class="modal-head"><h2>${b.id ? 'Editar' : 'Novo'} benefício</h2>
       <button class="x" onclick="window.__closeBenefit()">×</button></div>
     <div class="modal-body">
@@ -1262,7 +1264,7 @@ function editProfile(pid) {
 }
 function profileModal() {
   const p = S.editingProfile;
-  return `<div class="modal-bg" onclick="if(event.target===this)window.__closeProfile()"><div class="modal" style="width:min(480px,100%)">
+  return `<div class="modal-bg"><div class="modal" style="width:min(480px,100%)">
     <div class="modal-head"><h2>${p.id ? 'Editar' : 'Novo'} perfil</h2><button class="x" onclick="window.__closeProfile()">×</button></div>
     <div class="modal-body">
       <label class="lbl">Nome (deve casar com a coluna “Perfil” da planilha)</label>
@@ -1339,7 +1341,7 @@ function editEmployee(eid) {
 }
 function employeeModal() {
   const e = S.editingEmployee;
-  return `<div class="modal-bg" onclick="if(event.target===this)window.__closeEmployee()"><div class="modal" style="width:min(520px,100%)">
+  return `<div class="modal-bg"><div class="modal" style="width:min(520px,100%)">
     <div class="modal-head"><h2>Perfil do funcionário</h2><button class="x" onclick="window.__closeEmployee()">×</button></div>
     <div class="modal-body">
       <p style="margin:0 0 4px"><b>${esc(e.name || '—')}</b></p>
@@ -1521,7 +1523,7 @@ function editRaffle(rid) {
 }
 function raffleModal() {
   const r = S.editingRaffle;
-  return `<div class="modal-bg" onclick="if(event.target===this)window.__closeRaffle()"><div class="modal">
+  return `<div class="modal-bg"><div class="modal">
     <div class="modal-head"><h2>${r.id ? 'Editar' : 'Novo'} sorteio</h2><button class="x" onclick="window.__closeRaffle()">×</button></div>
     <div class="modal-body">
       <div class="form-grid">
@@ -1669,22 +1671,32 @@ async function publish(rid) {
 // CONFIGURAÇÕES
 // ============================================================================
 function settingsView() {
-  return head('Configurações', 'Nome do portal, empresa e aviso de privacidade.') + `
-    <div class="panel"><div class="panel-body">
+  const cardIds = S.settings?.cardProfileIds || [];
+  return head('Configurações', 'Nome do portal, privacidade e carteirinha do cinema.') + `
+    <div class="panel"><div class="panel-head"><h2>Portal</h2></div><div class="panel-body">
       <div class="form-grid">
         <div><label class="lbl">Nome do portal</label><input class="field" id="st-portalName" value="${escAttr(S.settings?.portalName || '')}"></div>
         <div><label class="lbl">Empresa</label><input class="field" id="st-companyName" value="${escAttr(S.settings?.companyName || '')}"></div>
         <div class="full"><label class="lbl">Texto de privacidade (LGPD)</label>
           <textarea class="field" id="st-privacyText" style="min-height:90px">${esc(S.settings?.privacyText || '')}</textarea></div>
       </div>
-      <div style="margin-top:16px"><button class="btn" onclick="window.__saveSettings()">Salvar configurações</button></div>
-    </div></div>`;
+    </div></div>
+    <div class="panel"><div class="panel-head"><h2>Carteirinha do cinema</h2></div><div class="panel-body">
+      <label class="check" style="margin-bottom:14px"><input type="checkbox" id="st-cardEnabled" ${S.settings?.cardEnabled !== false ? 'checked' : ''}> Mostrar a carteirinha para os funcionários</label>
+      <label class="lbl">Perfis que veem a carteirinha</label>
+      <div class="chips">${S.profiles.map(p =>
+        `<label class="chip" style="cursor:pointer"><input type="checkbox" id="st-card-prof-${p.id}" ${cardIds.includes(p.id) ? 'checked' : ''} style="margin-right:6px;accent-color:var(--rh-forest)">${esc(p.name)}</label>`).join('')}</div>
+      <p class="muted" style="font-size:12.5px;margin:8px 0 0">Deixe <b>todos desmarcados</b> para liberar a carteirinha a todos os perfis. Marque apenas os perfis que têm direito à meia-entrada naquele cinema.</p>
+    </div></div>
+    <div style="margin-bottom:22px"><button class="btn" onclick="window.__saveSettings()">Salvar configurações</button></div>`;
 }
 async function saveSettings() {
   const data = {
     portalName: document.getElementById('st-portalName').value.trim(),
     companyName: document.getElementById('st-companyName').value.trim(),
-    privacyText: document.getElementById('st-privacyText').value.trim()
+    privacyText: document.getElementById('st-privacyText').value.trim(),
+    cardEnabled: document.getElementById('st-cardEnabled').checked,
+    cardProfileIds: S.profiles.filter(p => document.getElementById('st-card-prof-' + p.id)?.checked).map(p => p.id)
   };
   await DB.saveSettings(data);
   await DB.logAudit({ action: 'update', entity: 'settings', userEmail: S.user.email });
