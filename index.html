@@ -107,6 +107,17 @@ body{font-family:var(--body);color:var(--ink);-webkit-font-smoothing:antialiased
 .card.benefit.featured{box-shadow:0 1px 0 rgba(2,79,43,.04),0 14px 30px rgba(2,79,43,.10);
   outline:2px solid var(--accent);outline-offset:0}
 
+/* === Pop-up de comunicado === */
+.comm-overlay{position:fixed;inset:0;z-index:80;background:rgba(8,20,12,.62);display:flex;
+  align-items:center;justify-content:center;padding:20px;
+  padding-top:calc(env(safe-area-inset-top,0px) + 20px);padding-bottom:calc(env(safe-area-inset-bottom,0px) + 20px)}
+.comm-box{position:relative;width:min(440px,100%);max-height:100%;display:flex;flex-direction:column;align-items:center;gap:14px}
+.comm-box img{width:100%;max-height:78vh;object-fit:contain;border-radius:18px;box-shadow:0 24px 60px rgba(0,0,0,.4);background:#fff}
+.comm-close{position:absolute;top:-12px;right:-6px;width:36px;height:36px;border-radius:50%;border:0;
+  background:#fff;color:var(--ink);font-size:22px;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+.comm-ok{border:0;background:#fff;color:var(--primary);font:inherit;font-weight:800;
+  border-radius:999px;padding:12px 28px;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+
 </style></head><body>
 <div id="root"><main class="login"><section class="login-card"><h1>Carregando…</h1></section></main></div>
 <div class="toast" id="toast"></div>
@@ -321,6 +332,16 @@ async function getSettings() {
 }
 async function saveSettings(data) {
   await setDoc(ref('settings', 'main'), { ...data, updatedAt: Date.now() }, { merge: true });
+}
+
+// COMUNICADO (aviso/arte que aparece ao funcionário após o login).
+// Guardado em settings/communication (leitura pública, escrita só RH).
+async function getCommunication() {
+  const snap = await getDoc(ref('settings', 'communication')).catch(() => null);
+  return snap && snap.exists() ? snap.data() : null;
+}
+async function saveCommunication(data) {
+  await setDoc(ref('settings', 'communication'), { ...data, updatedAt: Date.now() }, { merge: true });
 }
 
 // ----------------------------------------------------------------------------
@@ -773,7 +794,7 @@ const HKEY = 'rgf_h'; // chave do hash no localStorage
 // --- Estado da aplicação -----------------------------------------------------
 const S = {
   settings: null, profiles: [], benefits: [],
-  employee: null, raffle: null, myEntries: [], myWinner: null,
+  employee: null, raffle: null, myEntries: [], myWinner: null, comm: null,
   screen: 'home', openBenefitId: null, search: '', category: ''
 };
 
@@ -791,6 +812,7 @@ async function init() {
       else localStorage.removeItem(HKEY);
     }
     render();
+    if (S.employee) maybeShowComm();
   } catch (e) {
     root().innerHTML = errorView(e);
   }
@@ -800,6 +822,7 @@ async function afterLogin() {
   localStorage.setItem(HKEY, S.employee.id);
   S.profiles = await listProfiles();
   S.benefits = await listBenefits();
+  S.comm = await getCommunication().catch(() => null);
   S.raffle = await getCurrentRaffle();
   if (S.raffle) {
     S.myEntries = await getMyEntries(S.raffle, S.employee.id);
@@ -832,6 +855,7 @@ async function login() {
   await afterLogin();
   S.screen = 'home';
   render();
+  maybeShowComm();
 }
 
 function logout() {
@@ -1151,6 +1175,25 @@ function errorView(e) {
     <p>Verifique sua conexão e tente novamente. Se persistir, procure o RH/DP.</p>
     <p style="font-size:12px;color:var(--bad);margin-top:8px">Detalhe: ${esc(msg)}</p>
   </section></main>`;
+}
+
+// Mostra o comunicado (arte) uma única vez por versão, neste dispositivo.
+function maybeShowComm() {
+  const c = S.comm;
+  if (!c || !c.active || !c.imageBase64 || !c.id) return;
+  if (localStorage.getItem('rgf_comm_seen') === c.id) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'comm-overlay';
+  wrap.innerHTML = `<div class="comm-box">
+    <button class="comm-close" aria-label="Fechar">×</button>
+    <img src="${escAttr(c.imageBase64)}" alt="Comunicado">
+    <button class="comm-ok">Entendi</button>
+  </div>`;
+  const close = () => { try { localStorage.setItem('rgf_comm_seen', c.id); } catch (e) {} wrap.remove(); };
+  wrap.addEventListener('click', e => { if (e.target === wrap) close(); });
+  wrap.querySelector('.comm-close').onclick = close;
+  wrap.querySelector('.comm-ok').onclick = close;
+  document.body.appendChild(wrap);
 }
 
 // --- Expõe handlers para os onclick inline -----------------------------------
