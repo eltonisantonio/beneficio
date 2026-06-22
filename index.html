@@ -167,6 +167,16 @@ function escAttr(v) {
   return esc(v).replace(/'/g, '&#39;');
 }
 
+// Versão "limpa" para prévias curtas: remove a marcação (** * _) e junta linhas.
+function previewText(v) {
+  return String(v || '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1$2')
+    .replace(/(^|[\s(])_([^_\n]+)_/g, '$1$2')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Formata texto simples: **negrito**, *itálico* (ou _itálico_) e quebras de linha.
 // Escapa o HTML primeiro (seguro), depois aplica a marcação leve.
 function formatText(v) {
@@ -994,7 +1004,7 @@ function benefitCard(b) {
   if (b.featured) badges.push('<span class="badge hot">★ Destaque</span>');
   if (b.actionRequired) badges.push('<span class="badge warn">Ação necessária</span>');
   if (b.endDate) badges.push(`<span class="badge">Até ${esc(dateShort(b.endDate))}</span>`);
-  const desc = String(b.description || '');
+  const desc = previewText(b.description || '');
   return `<button class="card benefit${b.featured ? ' featured' : ''}" onclick="window.__openBenefit('${b.id}')">
     <div class="brow">${iconHTML(b)}
       <div class="btitle"><h3>${esc(b.name)}</h3><span>${esc(b.category)}</span></div></div>
